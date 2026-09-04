@@ -1,0 +1,1 @@
+console.log("PromptLang compiler running")
