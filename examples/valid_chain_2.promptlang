@@ -1,0 +1,1 @@
+step extract: in=text, out=json -> step listify: in=json, out=list
