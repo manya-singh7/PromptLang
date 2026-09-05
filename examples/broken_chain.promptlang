@@ -1,0 +1,1 @@
+step summarize: in=text, out=text -> step format: in=text, out=list -> step email: in=text, out=text

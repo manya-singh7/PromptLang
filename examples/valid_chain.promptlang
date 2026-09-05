@@ -1,0 +1,1 @@
+step summarize: in=text, out=text -> step translate: in=text, out=text -> step format: in=text, out=list
