@@ -94,6 +94,9 @@ function parse(tokens: Token[]): Step[] {
 
     if (tokens[pos] && tokens[pos].type === "ARROW") {
       pos++;
+      if (pos >= tokens.length) {
+        throw new ParseError(`Unexpected end of input after "->" at token ${pos} — a step was expected after the arrow`);
+      }
     } else if (pos < tokens.length) {
       throw new ParseError(`Expected -> or end of input at token ${pos}`);
     }
@@ -105,7 +108,16 @@ function parse(tokens: Token[]): Step[] {
 const filename = process.argv[2] || "examples/valid_chain.promptlang";
 const source = fs.readFileSync(filename, "utf-8");
 const tokens = tokenize(source);
-const steps = parse(tokens);
 
-console.log(`Parsed ${steps.length} step(s) from ${filename}:\n`);
-console.table(steps);
+try {
+  const steps = parse(tokens);
+  console.log(`Parsed ${steps.length} step(s) from ${filename}:\n`);
+  console.table(steps);
+} catch (err) {
+  if (err instanceof ParseError) {
+    console.error(`\n❌ Syntax error in ${filename}: ${err.message}`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
+}
