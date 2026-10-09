@@ -1,0 +1,1 @@
+step shorten: in=text, out=text[max 280] -> step translate: in=text[max 1000], out=text
