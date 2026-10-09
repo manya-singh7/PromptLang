@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "build:web": "esbuild web/app.ts --bundle --outfile=web/app.js"
   },
   "repository": {
     "type": "git",

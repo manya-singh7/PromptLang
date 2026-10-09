@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptLang Chain Visualizer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PromptLang Chain Visualizer</h1>
+      <p class="subtitle">Interactive compiler visualizer and type-compatibility checker for typed prompt chains</p>
+    </header>
+
+    <main>
+      <!-- PromptLang Code Input Card -->
+      <section class="editor-card">
+        <label for="source-input">PromptLang Chain Definition:</label>
+        <textarea
+          id="source-input"
+          placeholder="Paste or write PromptLang code here... e.g. step summarize: in=text, out=text -> step translate: in=text, out=text"
+          spellcheck="false"
+        ></textarea>
+        
+        <div class="controls">
+          <div class="btn-group">
+            <button id="check-btn" class="btn-primary" type="button">
+              <span>▶</span> Check
+            </button>
+          </div>
+
+          <div class="btn-group">
+            <button id="load-valid-btn" class="btn-secondary" type="button" title="Load examples/valid_chain.promptlang">
+              Valid Example
+            </button>
+            <button id="load-broken-btn" class="btn-secondary" type="button" title="Load examples/broken_chain.promptlang">
+              Broken Example
+            </button>
+            <button id="load-limits-btn" class="btn-secondary" type="button" title="Load chain with max length limits">
+              Limits Example
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Parse Error Box (shown only when parse throws ParseError) -->
+      <div id="error-container" class="error-box" style="display: none;">
+        <div class="error-title">
+          <span>❌</span> Parse Error
+        </div>
+        <div id="error-message" class="error-message"></div>
+      </div>
+
+      <!-- Chain Diagram Visualization Section -->
+      <section id="visualization-section" class="visualization-section">
+        <div class="visualization-header">
+          <h2 class="visualization-title">Chain Diagram</h2>
+          <span id="chain-status" class="chain-status-badge status-ok">Ready</span>
+        </div>
+        <div id="chain-flow" class="chain-flow">
+          <!-- Dynamically populated step cards and arrows -->
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
