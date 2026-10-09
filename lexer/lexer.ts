@@ -12,6 +12,8 @@ function tokenize(source: string): Token[] {
     .replace(/:/g, " : ")
     .replace(/,/g, " , ")
     .replace(/=/g, " = ")
+    .replace(/\[/g, " [ ")
+    .replace(/\]/g, " ] ")
     .split(/\s+/)
     .filter(w => w.length > 0);
 
@@ -19,6 +21,8 @@ function tokenize(source: string): Token[] {
 
   for (const word of words) {
     if (word === "step") {
+      tokens.push({ type: "KEYWORD", value: word });
+    } else if (word === "max") {
       tokens.push({ type: "KEYWORD", value: word });
     } else if (word === "->") {
       tokens.push({ type: "ARROW", value: word });
@@ -28,10 +32,16 @@ function tokenize(source: string): Token[] {
       tokens.push({ type: "COMMA", value: word });
     } else if (word === "=") {
       tokens.push({ type: "EQUALS", value: word });
+    } else if (word === "[") {
+      tokens.push({ type: "LBRACKET", value: word });
+    } else if (word === "]") {
+      tokens.push({ type: "RBRACKET", value: word });
     } else if (types.includes(word)) {
       tokens.push({ type: "TYPE", value: word });
     } else if (word === "in" || word === "out") {
       tokens.push({ type: "PARAM", value: word });
+    } else if (/^-?\d+$/.test(word)) {
+      tokens.push({ type: "NUMBER", value: word });
     } else {
       tokens.push({ type: "IDENTIFIER", value: word });
     }
