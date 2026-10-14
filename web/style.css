@@ -223,14 +223,49 @@ button.btn-secondary:hover {
   border: 1px solid var(--danger-border);
 }
 
-/* Diagram Flow Container */
+/* Summary line above the chain */
+.chain-summary-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.summary-status {
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-status.status-ok {
+  color: var(--success);
+}
+
+.summary-status.status-error {
+  color: var(--danger);
+}
+
+.summary-time {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+/* Diagram Flow Container - centered horizontally, wrapping on narrow screens */
 .chain-flow {
   display: flex;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 4px;
-  overflow-x: auto;
+  gap: 12px;
+  row-gap: 24px;
+  padding: 16px 8px;
 }
 
 /* Step Box Card */
@@ -242,7 +277,13 @@ button.btn-secondary:hover {
   min-width: 190px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
   flex-shrink: 0;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.step-card.step-card-error {
+  border-color: var(--danger);
+  border-width: 2px;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.2), 0 3px 8px rgba(220, 38, 38, 0.12);
 }
 
 .step-card:hover {
@@ -322,6 +363,22 @@ button.btn-secondary:hover {
   color: #7e22ce;
 }
 
+.port-in-error {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 4px;
+  padding: 2px 7px;
+  margin-top: 3px;
+  margin-bottom: 2px;
+  display: inline-block;
+  font-family: var(--font-mono);
+  line-height: 1.35;
+  animation: fadeIn 0.15s ease-in-out;
+}
+
 .limit-badge {
   font-size: 11px;
   font-weight: 600;
@@ -339,8 +396,8 @@ button.btn-secondary:hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: 140px;
-  max-width: 260px;
+  min-width: 150px;
+  max-width: 280px;
   padding: 8px 6px;
   flex-shrink: 0;
 }
