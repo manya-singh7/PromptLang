@@ -13,6 +13,7 @@ function initApp(): void {
   const errorContainer = document.getElementById("error-container") as HTMLElement | null;
   const errorMessage = document.getElementById("error-message") as HTMLElement | null;
   const visualizationSection = document.getElementById("visualization-section") as HTMLElement | null;
+  const chainSummary = document.getElementById("chain-summary") as HTMLElement | null;
   const chainFlow = document.getElementById("chain-flow") as HTMLElement | null;
   const chainStatus = document.getElementById("chain-status") as HTMLElement | null;
 
@@ -40,6 +41,7 @@ function initApp(): void {
     if (!source) {
       errorContainer!.style.display = "none";
       if (visualizationSection) visualizationSection.style.display = "block";
+      if (chainSummary) chainSummary.style.display = "none";
       chainFlow!.style.display = "block";
       chainFlow!.innerHTML = `
         <div class="empty-state">
@@ -56,7 +58,13 @@ function initApp(): void {
 
     try {
       const tokens = tokenize(source);
+
+      // Measure parse plus checkChain execution time with performance.now()
+      const t0 = performance.now();
       const steps = parse(tokens);
+      const checkResults = checkChain(steps);
+      const t1 = performance.now();
+      const elapsedMs = (t1 - t0).toFixed(1);
 
       // Hide error alert when parse succeeds
       errorContainer!.style.display = "none";
@@ -65,6 +73,7 @@ function initApp(): void {
       chainFlow!.innerHTML = "";
 
       if (steps.length === 0) {
+        if (chainSummary) chainSummary.style.display = "none";
         chainFlow!.innerHTML = `
           <div class="empty-state">No steps found in input.</div>
         `;
@@ -72,15 +81,35 @@ function initApp(): void {
         return;
       }
 
-      // Check consecutive type matching using checkChain
-      const checkResults = checkChain(steps);
-      const hasMismatch = checkResults.some((r) => !r.ok);
+      // Calculate error count from checkChain
+      const errorCount = checkResults.filter((r) => !r.ok).length;
+
+      // Update summary line above the chain
+      if (chainSummary) {
+        chainSummary.style.display = "flex";
+        if (errorCount === 0) {
+          chainSummary.innerHTML = `
+            <span class="summary-status status-ok">No errors found</span>
+            <span class="summary-time">checked in ${elapsedMs} ms</span>
+          `;
+        } else {
+          chainSummary.innerHTML = `
+            <span class="summary-status status-error">${errorCount} error(s) found</span>
+            <span class="summary-time">checked in ${elapsedMs} ms</span>
+          `;
+        }
+      }
 
       // Render step cards and connecting arrows
       steps.forEach((step, index) => {
+        // Check if incoming arrow to this step had a type mismatch
+        const incomingCheck =
+          index > 0 ? checkResults.find((r) => r.fromIndex === index - 1) : undefined;
+        const hasInputMismatch = Boolean(incomingCheck && !incomingCheck.ok);
+
         // Step box
         const stepCard = document.createElement("div");
-        stepCard.className = "step-card";
+        stepCard.className = `step-card${hasInputMismatch ? " step-card-error" : ""}`;
 
         const inLimitHtml =
           step.inMax !== undefined
@@ -89,6 +118,12 @@ function initApp(): void {
         const outLimitHtml =
           step.outMax !== undefined
             ? `<span class="limit-badge">[max ${step.outMax}]</span>`
+            : "";
+
+        const prevStep = index > 0 ? steps[index - 1] : undefined;
+        const inErrorHtml =
+          hasInputMismatch && prevStep
+            ? `<div class="port-in-error">expects ${escapeHtml(step.inType)}, got ${escapeHtml(prevStep.outType)}</div>`
             : "";
 
         stepCard.innerHTML = `
@@ -101,6 +136,7 @@ function initApp(): void {
               <span class="port-label">in</span>
               <span class="type-pill">${escapeHtml(step.inType)}${inLimitHtml}</span>
             </div>
+            ${inErrorHtml}
             <div class="port-row port-out">
               <span class="port-label">out</span>
               <span class="type-pill">${escapeHtml(step.outType)}${outLimitHtml}</span>
@@ -123,9 +159,9 @@ function initApp(): void {
 
           connector.innerHTML = `
             <div class="arrow-line-container">
-              <svg class="arrow-svg" width="70" height="20" viewBox="0 0 70 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M4 10 H56" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
-                <path d="M52 4 L64 10 L52 16 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+              <svg class="arrow-svg" width="90" height="26" viewBox="0 0 90 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 13 H74" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                <path d="M68 6 L84 13 L68 20 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
               </svg>
             </div>
             ${errorHtml}
@@ -134,10 +170,10 @@ function initApp(): void {
         }
       });
 
-      // Update chain status badge
+      // Update chain status badge in header
       if (chainStatus) {
         chainStatus.style.display = "inline-flex";
-        if (hasMismatch) {
+        if (errorCount > 0) {
           chainStatus.className = "chain-status-badge status-mismatch";
           chainStatus.textContent = "Type Mismatch";
         } else {
@@ -147,6 +183,7 @@ function initApp(): void {
       }
     } catch (err) {
       // If parse throws ParseError, show the message in a red box instead of the chain
+      if (chainSummary) chainSummary.style.display = "none";
       if (err instanceof ParseError) {
         errorContainer!.style.display = "block";
         errorMessage!.textContent = err.message;
