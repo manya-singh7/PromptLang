@@ -1,4 +1,5 @@
 import { tokenize, parse, ParseError, type Step } from "../parser/parser";
+import { analyze } from "../parser/semantic";
 import { checkChain, type ChainCheckResult } from "./check";
 
 function escapeHtml(text: string): string {
@@ -12,6 +13,7 @@ function initApp(): void {
   const checkBtn = document.getElementById("check-btn") as HTMLButtonElement | null;
   const errorContainer = document.getElementById("error-container") as HTMLElement | null;
   const errorMessage = document.getElementById("error-message") as HTMLElement | null;
+  const errorTitle = errorContainer?.querySelector(".error-title") as HTMLElement | null;
   const visualizationSection = document.getElementById("visualization-section") as HTMLElement | null;
   const chainSummary = document.getElementById("chain-summary") as HTMLElement | null;
   const chainFlow = document.getElementById("chain-flow") as HTMLElement | null;
@@ -34,6 +36,10 @@ function initApp(): void {
 
   const LIMITS_EXAMPLE =
     "step shorten: in=text, out=text[max 280] -> step translate: in=text[max 1000], out=text";
+
+  function showErrorTitle(title: string): void {
+    if (errorTitle) errorTitle.innerHTML = `<span>❌</span> ${escapeHtml(title)}`;
+  }
 
   function render(): void {
     const source = sourceInput!.value.trim();
@@ -62,6 +68,21 @@ function initApp(): void {
       // Measure parse plus checkChain execution time with performance.now()
       const t0 = performance.now();
       const steps = parse(tokens);
+
+      // Semantic issues block the diagram, shown in the same red box as parse errors
+      const issues = analyze(steps);
+      if (issues.length > 0) {
+        if (chainSummary) chainSummary.style.display = "none";
+        showErrorTitle(issues.length === 1 ? "Semantic Error" : `${issues.length} Semantic Errors`);
+        errorContainer!.style.display = "block";
+        errorMessage!.innerHTML = issues
+          .map((issue) => `<div>${escapeHtml(issue.message)}</div>`)
+          .join("");
+        if (visualizationSection) visualizationSection.style.display = "none";
+        chainFlow!.innerHTML = "";
+        return;
+      }
+
       const checkResults = checkChain(steps);
       const t1 = performance.now();
       const elapsedMs = (t1 - t0).toFixed(1);
@@ -184,6 +205,7 @@ function initApp(): void {
     } catch (err) {
       // If parse throws ParseError, show the message in a red box instead of the chain
       if (chainSummary) chainSummary.style.display = "none";
+      showErrorTitle("Parse Error");
       if (err instanceof ParseError) {
         errorContainer!.style.display = "block";
         errorMessage!.textContent = err.message;

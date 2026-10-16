@@ -1,0 +1,1 @@
+step gather_notes: in=text, out=text -> step refine_points: in=text[max 500], out=text[max 300] -> step polish_copy: in=text[max 300], out=text[max 200] -> step save_copy: in=text, out=text

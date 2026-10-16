@@ -1,0 +1,1 @@
+step receive_ticket: in=text, out=json -> step triage_ticket: in=json, out=json -> step extract_tags: in=json, out=list -> step cluster_issues: in=list, out=list -> step compose_sms: in=list, out=text[max 160] -> step send_sms_gateway: in=text[max 200], out=text

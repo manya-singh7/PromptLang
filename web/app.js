@@ -45,6 +45,9 @@
     }
   }
   function parseTypeWithLimit(tokens, pos) {
+    if (tokens[pos] && tokens[pos].type === "IDENTIFIER") {
+      throw new ParseError(`Unknown type "${tokens[pos].value}". Expected text, list or json.`);
+    }
     expect(tokens, pos, "TYPE");
     const typeName = tokens[pos].value;
     pos++;
@@ -159,6 +162,62 @@
     }
   });
 
+  // parser/semantic.ts
+  function checkType(step, index, type, issues) {
+    if (!KNOWN_TYPES.includes(type)) {
+      issues.push({
+        stepIndex: index,
+        message: `step "${step.name}" uses unknown type "${type}" (expected text, list or json)`
+      });
+    }
+  }
+  function checkLimit(step, index, side, type, max, issues) {
+    if (max === void 0) return;
+    if (type !== "text") {
+      issues.push({
+        stepIndex: index,
+        message: `step "${step.name}" has a length limit on its ${side} of type "${type}" (limits are only allowed on text)`
+      });
+    }
+    if (!(max > 0)) {
+      issues.push({
+        stepIndex: index,
+        message: `step "${step.name}" has an ${side} length limit of ${max} (limits must be greater than zero)`
+      });
+    }
+  }
+  function analyze(steps) {
+    const issues = [];
+    if (steps.length === 0) {
+      issues.push({ stepIndex: -1, message: "the chain is empty (no steps defined)" });
+      return issues;
+    }
+    const firstIndexByName = /* @__PURE__ */ new Map();
+    steps.forEach((step, index) => {
+      const firstIndex = firstIndexByName.get(step.name);
+      if (firstIndex === void 0) {
+        firstIndexByName.set(step.name, index);
+      } else {
+        issues.push({
+          stepIndex: index,
+          message: `step "${step.name}" is defined twice (steps ${firstIndex + 1} and ${index + 1})`
+        });
+      }
+      checkType(step, index, step.inType, issues);
+      checkType(step, index, step.outType, issues);
+      checkLimit(step, index, "input", step.inType, step.inMax, issues);
+      checkLimit(step, index, "output", step.outType, step.outMax, issues);
+    });
+    return issues;
+  }
+  var KNOWN_TYPES;
+  var init_semantic = __esm({
+    "parser/semantic.ts"() {
+      "use strict";
+      KNOWN_TYPES = ["text", "list", "json"];
+    }
+  });
+
   // web/check.ts
   function checkChain(steps) {
     const results = [];
@@ -192,6 +251,7 @@
   var require_app = __commonJS({
     "web/app.ts"() {
       init_parser();
+      init_semantic();
       init_check();
       function escapeHtml(text) {
         const div = document.createElement("div");
@@ -203,6 +263,7 @@
         const checkBtn = document.getElementById("check-btn");
         const errorContainer = document.getElementById("error-container");
         const errorMessage = document.getElementById("error-message");
+        const errorTitle = errorContainer?.querySelector(".error-title");
         const visualizationSection = document.getElementById("visualization-section");
         const chainSummary = document.getElementById("chain-summary");
         const chainFlow = document.getElementById("chain-flow");
@@ -217,6 +278,9 @@
         const VALID_EXAMPLE = "step summarize: in=text, out=text -> step translate: in=text, out=text -> step format: in=text, out=list";
         const BROKEN_EXAMPLE = "step summarize: in=text, out=text -> step format: in=text, out=list -> step email: in=text, out=text";
         const LIMITS_EXAMPLE = "step shorten: in=text, out=text[max 280] -> step translate: in=text[max 1000], out=text";
+        function showErrorTitle(title) {
+          if (errorTitle) errorTitle.innerHTML = `<span>\u274C</span> ${escapeHtml(title)}`;
+        }
         function render() {
           const source = sourceInput.value.trim();
           if (!source) {
@@ -240,6 +304,16 @@
             const tokens = tokenize(source);
             const t0 = performance.now();
             const steps = parse(tokens);
+            const issues = analyze(steps);
+            if (issues.length > 0) {
+              if (chainSummary) chainSummary.style.display = "none";
+              showErrorTitle(issues.length === 1 ? "Semantic Error" : `${issues.length} Semantic Errors`);
+              errorContainer.style.display = "block";
+              errorMessage.innerHTML = issues.map((issue) => `<div>${escapeHtml(issue.message)}</div>`).join("");
+              if (visualizationSection) visualizationSection.style.display = "none";
+              chainFlow.innerHTML = "";
+              return;
+            }
             const checkResults = checkChain(steps);
             const t1 = performance.now();
             const elapsedMs = (t1 - t0).toFixed(1);
@@ -327,6 +401,7 @@
             }
           } catch (err) {
             if (chainSummary) chainSummary.style.display = "none";
+            showErrorTitle("Parse Error");
             if (err instanceof ParseError) {
               errorContainer.style.display = "block";
               errorMessage.textContent = err.message;

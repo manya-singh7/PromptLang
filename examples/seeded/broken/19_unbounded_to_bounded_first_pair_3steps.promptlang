@@ -1,0 +1,1 @@
+step load_transcript: in=text, out=text -> step make_headline: in=text[max 100], out=text[max 100] -> step archive_headline: in=text, out=text

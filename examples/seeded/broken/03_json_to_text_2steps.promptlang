@@ -1,0 +1,1 @@
+step generate_payload: in=text, out=json -> step format_markdown: in=text, out=text

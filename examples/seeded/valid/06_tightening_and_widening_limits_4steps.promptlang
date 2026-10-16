@@ -1,0 +1,1 @@
+step parse_memo: in=text, out=text[max 50] -> step widen_buffer: in=text[max 120], out=text[max 100] -> step forward_packet: in=text[max 250], out=text[max 250] -> step store_memo: in=text, out=text

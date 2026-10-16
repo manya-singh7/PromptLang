@@ -1,0 +1,1 @@
+step fetch_review: in=text[max 200], out=text[max 200] -> step extract_sentiment: in=text[max 250], out=text[max 600] -> step generate_snippet: in=text[max 350], out=text[max 300] -> step log_snippet: in=text, out=text

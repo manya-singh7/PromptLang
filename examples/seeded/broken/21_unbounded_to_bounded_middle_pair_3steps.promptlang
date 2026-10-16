@@ -1,0 +1,1 @@
+step scrape_post: in=text[max 300], out=text[max 300] -> step parse_content: in=text, out=text -> step truncate_bio: in=text[max 140], out=text

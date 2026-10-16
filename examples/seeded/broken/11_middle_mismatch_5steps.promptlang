@@ -1,0 +1,1 @@
+step read_query: in=text, out=text -> step expand_terms: in=text, out=list -> step rank_results: in=list, out=list -> step serialize_json: in=text, out=json -> step output_view: in=json, out=text

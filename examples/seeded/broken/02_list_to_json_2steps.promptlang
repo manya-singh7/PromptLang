@@ -1,0 +1,1 @@
+step collect_tags: in=text, out=list -> step parse_config: in=json, out=text

@@ -1,0 +1,1 @@
+step load_csv: in=text, out=list -> step process_rows: in=list, out=list -> step summarize_record: in=json, out=text -> step publish: in=text, out=text

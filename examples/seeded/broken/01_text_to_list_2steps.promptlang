@@ -1,0 +1,1 @@
+step read_input: in=text, out=text -> step tokenize_items: in=list, out=list
