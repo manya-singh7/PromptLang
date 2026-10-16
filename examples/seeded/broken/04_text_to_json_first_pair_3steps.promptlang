@@ -1,0 +1,1 @@
+step fetch_doc: in=text, out=text -> step decode_ast: in=json, out=list -> step count_nodes: in=list, out=text

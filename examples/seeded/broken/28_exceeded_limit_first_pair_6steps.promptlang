@@ -1,0 +1,1 @@
+step pull_stream: in=text, out=text[max 4000] -> step chunk_stream: in=text[max 2000], out=text[max 1800] -> step analyze_sentiment: in=text[max 2000], out=text[max 500] -> step format_bullet: in=text[max 600], out=text[max 300] -> step translate_bullet: in=text[max 300], out=text[max 300] -> step emit_line: in=text, out=text

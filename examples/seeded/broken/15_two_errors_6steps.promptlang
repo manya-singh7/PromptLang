@@ -1,0 +1,1 @@
+step read_source: in=text, out=text -> step tokenize_words: in=text, out=list -> step index_inverted: in=json, out=json -> step deduplicate: in=json, out=json -> step build_stats: in=json, out=json -> step export_archive: in=list, out=text

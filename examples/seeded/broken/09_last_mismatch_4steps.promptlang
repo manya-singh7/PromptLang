@@ -1,0 +1,1 @@
+step read_log: in=text, out=text -> step parse_records: in=text, out=json -> step validate_schema: in=json, out=json -> step write_report: in=list, out=text

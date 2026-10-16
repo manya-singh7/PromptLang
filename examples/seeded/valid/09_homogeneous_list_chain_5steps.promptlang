@@ -1,0 +1,1 @@
+step read_words: in=text, out=list -> step lowercase_all: in=list, out=list -> step remove_stopwords: in=list, out=list -> step sort_unique: in=list, out=list -> step join_words: in=list, out=text

@@ -1,0 +1,1 @@
+step fetch_rss: in=text, out=text -> step parse_xml: in=text, out=json -> step select_entries: in=json, out=list -> step format_digest: in=list, out=text[max 300] -> step broadcast_feed: in=text[max 1000], out=text

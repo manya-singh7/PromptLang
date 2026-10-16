@@ -1,0 +1,1 @@
+step parse_input: in=text, out=list -> step score_sentiment: in=text, out=text -> step build_graph: in=text, out=json -> step emit_alerts: in=text, out=list

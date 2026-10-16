@@ -1,0 +1,1 @@
+step read_report: in=text, out=text[max 900] -> step condense_findings: in=text[max 450], out=text[max 400] -> step extract_actions: in=text[max 500], out=text[max 300] -> step prioritize_items: in=text[max 350], out=text[max 200] -> step build_digest: in=text[max 200], out=text -> step write_sms: in=text[max 75], out=text

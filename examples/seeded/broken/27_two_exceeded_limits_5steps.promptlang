@@ -1,0 +1,1 @@
+step crawl_url: in=text, out=text[max 1200] -> step parse_dom: in=text[max 1500], out=text[max 1100] -> step extract_meta: in=text[max 700], out=text[max 450] -> step create_slug: in=text[max 500], out=text[max 350] -> step store_uri: in=text[max 60], out=text

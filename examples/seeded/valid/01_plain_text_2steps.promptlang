@@ -1,0 +1,1 @@
+step draft_summary: in=text, out=text -> step translate_fr: in=text, out=text

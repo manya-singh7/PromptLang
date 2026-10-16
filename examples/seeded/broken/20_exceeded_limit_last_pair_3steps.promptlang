@@ -1,0 +1,1 @@
+step draft_memo: in=text, out=text[max 1500] -> step review_memo: in=text[max 2000], out=text[max 800] -> step fit_card: in=text[max 400], out=text

@@ -1,0 +1,389 @@
+[
+  {
+    "file": "broken/01_text_to_list_2steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "Step read_input outputs text but step tokenize_items expects list."
+  },
+  {
+    "file": "broken/02_list_to_json_2steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "Step collect_tags outputs list but step parse_config expects json."
+  },
+  {
+    "file": "broken/03_json_to_text_2steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "Step generate_payload outputs json but step format_markdown expects text."
+  },
+  {
+    "file": "broken/04_text_to_json_first_pair_3steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "First pair fails because fetch_doc outputs text while decode_ast expects json."
+  },
+  {
+    "file": "broken/05_list_to_text_last_pair_3steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      1
+    ],
+    "note": "Last pair fails because split_sentences outputs list while translate expects text."
+  },
+  {
+    "file": "broken/06_json_to_list_first_pair_3steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "First pair fails because load_state outputs json but filter_lines expects list."
+  },
+  {
+    "file": "broken/07_middle_mismatch_4steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      1
+    ],
+    "note": "Middle transition fails because process_rows outputs list but summarize_record expects json."
+  },
+  {
+    "file": "broken/08_first_mismatch_4steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "First pair fails because ingest_data outputs json while extract_headers expects text."
+  },
+  {
+    "file": "broken/09_last_mismatch_4steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      2
+    ],
+    "note": "Last pair fails because validate_schema outputs json while write_report expects list."
+  },
+  {
+    "file": "broken/10_two_errors_4steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 2,
+    "failingPairs": [
+      0,
+      2
+    ],
+    "note": "Two type mismatches occur at the first and third transitions in a 4-step chain."
+  },
+  {
+    "file": "broken/11_middle_mismatch_5steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      2
+    ],
+    "note": "Rank_results outputs list but serialize_json expects text at transition 2."
+  },
+  {
+    "file": "broken/12_first_and_last_mismatch_5steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 2,
+    "failingPairs": [
+      0,
+      3
+    ],
+    "note": "Two type errors occur at the first transition (json to text) and final transition (list to json)."
+  },
+  {
+    "file": "broken/13_adjacent_two_errors_5steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 2,
+    "failingPairs": [
+      1,
+      2
+    ],
+    "note": "Adjacent type mismatches occur at transitions 1 and 2 in a 5-step chain."
+  },
+  {
+    "file": "broken/14_single_mismatch_6steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 1,
+    "failingPairs": [
+      3
+    ],
+    "note": "Score_relevance outputs list but generate_summary expects text at transition 3 in a 6-step chain."
+  },
+  {
+    "file": "broken/15_two_errors_6steps.promptlang",
+    "valid": false,
+    "category": "type-mismatch",
+    "errorCount": 2,
+    "failingPairs": [
+      1,
+      4
+    ],
+    "note": "Two mismatches in a 6-step chain at transition 1 (list to json) and transition 4 (json to list)."
+  },
+  {
+    "file": "broken/16_unbounded_into_bounded_2steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "Unbounded text cannot fit into bounded text[max 280]."
+  },
+  {
+    "file": "broken/17_greater_limit_into_smaller_2steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "text[max 1000] exceeds the recipient limit text[max 160]."
+  },
+  {
+    "file": "broken/18_slight_overflow_limit_2steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "text[max 281] exceeds text[max 280] by one character."
+  },
+  {
+    "file": "broken/19_unbounded_to_bounded_first_pair_3steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "First pair fails because unbounded text from load_transcript cannot feed into text[max 100]."
+  },
+  {
+    "file": "broken/20_exceeded_limit_last_pair_3steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      1
+    ],
+    "note": "Last pair fails because text[max 800] exceeds fit_card limit text[max 400]."
+  },
+  {
+    "file": "broken/21_unbounded_to_bounded_middle_pair_3steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      1
+    ],
+    "note": "Middle transition fails because unbounded text cannot feed into text[max 140]."
+  },
+  {
+    "file": "broken/22_exceeded_limit_middle_4steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      1
+    ],
+    "note": "Extract_sentiment outputs text[max 600] which exceeds generate_snippet limit text[max 350]."
+  },
+  {
+    "file": "broken/23_unbounded_at_start_4steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "Initial step gather_notes outputs unbounded text into refine_points expecting text[max 500]."
+  },
+  {
+    "file": "broken/24_two_limit_violations_4steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 2,
+    "failingPairs": [
+      0,
+      2
+    ],
+    "note": "Violations at transition 0 (unbounded to bounded) and transition 2 (512 into 128)."
+  },
+  {
+    "file": "broken/25_large_gap_limit_middle_5steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      2
+    ],
+    "note": "Transition 2 fails because text[max 2500] greatly exceeds format_badge limit text[max 50]."
+  },
+  {
+    "file": "broken/26_unbounded_at_end_5steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      3
+    ],
+    "note": "Transition 3 fails because render_preview outputs unbounded text into text[max 90]."
+  },
+  {
+    "file": "broken/27_two_exceeded_limits_5steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 2,
+    "failingPairs": [
+      1,
+      3
+    ],
+    "note": "Two limit violations: 1100 into 700 at transition 1 and 350 into 60 at transition 3."
+  },
+  {
+    "file": "broken/28_exceeded_limit_first_pair_6steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      0
+    ],
+    "note": "First transition fails because pull_stream outputs text[max 4000] into chunk_stream text[max 2000]."
+  },
+  {
+    "file": "broken/29_unbounded_middle_6steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 1,
+    "failingPairs": [
+      2
+    ],
+    "note": "Transition 2 fails because execute_task outputs unbounded text into text[max 250]."
+  },
+  {
+    "file": "broken/30_two_violations_ends_6steps.promptlang",
+    "valid": false,
+    "category": "limit-violation",
+    "errorCount": 2,
+    "failingPairs": [
+      0,
+      4
+    ],
+    "note": "Two violations in a 6-step chain: 900 into 450 at start, and unbounded into 75 at end."
+  },
+  {
+    "file": "valid/01_plain_text_2steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Two-step chain with matching plain text types."
+  },
+  {
+    "file": "valid/02_smaller_limit_to_larger_2steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Text with max 100 safely fits into recipient expecting max 280."
+  },
+  {
+    "file": "valid/03_equal_limits_2steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Equal limits of 70 characters match between consecutive steps."
+  },
+  {
+    "file": "valid/04_limit_into_unbounded_3steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Bounded text[max 280] fits into unbounded text followed by another plain text step."
+  },
+  {
+    "file": "valid/05_plain_json_and_list_3steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Three-step chain threading json and list types cleanly."
+  },
+  {
+    "file": "valid/06_tightening_and_widening_limits_4steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Four steps demonstrating progressively compatible limit subtyping and unbounded exit."
+  },
+  {
+    "file": "valid/07_mixed_types_with_limits_4steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Four steps transitioning list to json to bounded text to plain text."
+  },
+  {
+    "file": "valid/08_chain_of_five_steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Five-step chain combining text, json, list, and bounded text subtyping."
+  },
+  {
+    "file": "valid/09_homogeneous_list_chain_5steps.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Five-step pipeline processing lists through four consecutive transitions."
+  },
+  {
+    "file": "valid/10_six_steps_full_variety.promptlang",
+    "valid": true,
+    "category": "ok",
+    "errorCount": 0,
+    "failingPairs": [],
+    "note": "Six-step pipeline traversing json, list, and subtyped bounded text."
+  }
+]

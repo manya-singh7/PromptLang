@@ -56,6 +56,9 @@ function parseTypeWithLimit(
   tokens: Token[],
   pos: number
 ): { type: string; max?: number; nextPos: number } {
+  if (tokens[pos] && tokens[pos]!.type === "IDENTIFIER") {
+    throw new ParseError(`Unknown type "${tokens[pos]!.value}". Expected text, list or json.`);
+  }
   expect(tokens, pos, "TYPE");
   const typeName = tokens[pos]!.value;
   pos++;

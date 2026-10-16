@@ -1,0 +1,1 @@
+step clean_text: in=text, out=text -> step split_sentences: in=text, out=list -> step translate: in=text, out=text

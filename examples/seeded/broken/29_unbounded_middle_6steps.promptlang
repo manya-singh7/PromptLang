@@ -1,0 +1,1 @@
+step start_job: in=text[max 100], out=text[max 100] -> step prepare_env: in=text[max 200], out=text -> step execute_task: in=text, out=text -> step collect_telemetry: in=text[max 250], out=text[max 200] -> step format_alert: in=text[max 200], out=text[max 150] -> step notify_user: in=text, out=text

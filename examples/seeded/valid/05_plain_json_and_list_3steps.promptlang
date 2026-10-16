@@ -1,0 +1,1 @@
+step parse_payload: in=text, out=json -> step validate_config: in=json, out=list -> step render_list: in=list, out=text

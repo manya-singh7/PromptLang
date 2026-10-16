@@ -1,0 +1,1 @@
+step summarize_article: in=text, out=text[max 281] -> step post_status: in=text[max 280], out=text

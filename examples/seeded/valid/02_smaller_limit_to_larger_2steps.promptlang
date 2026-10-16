@@ -1,0 +1,1 @@
+step generate_tweet: in=text, out=text[max 100] -> step post_update: in=text[max 280], out=text

@@ -1,0 +1,1 @@
+step load_csv_data: in=text, out=list -> step extract_records: in=list, out=json -> step stringify_meta: in=json, out=text[max 500] -> step post_slack: in=text, out=text

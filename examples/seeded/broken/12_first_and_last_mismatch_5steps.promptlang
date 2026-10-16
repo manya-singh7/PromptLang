@@ -1,0 +1,1 @@
+step ingest_raw: in=text, out=json -> step parse_chunks: in=text, out=list -> step embed_chunks: in=list, out=list -> step generate_sql: in=list, out=list -> step execute_query: in=json, out=text

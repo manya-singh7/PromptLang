@@ -1,0 +1,1 @@
+step receive_webhook: in=text, out=json -> step parse_event: in=json, out=json -> step extract_items: in=json, out=list -> step score_relevance: in=list, out=list -> step generate_summary: in=text, out=text -> step send_slack: in=text, out=text

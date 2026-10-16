@@ -1,0 +1,1 @@
+step load_essay: in=text, out=text[max 5000] -> step outline_chapters: in=text[max 8000], out=text[max 4000] -> step extract_thesis: in=text[max 4000], out=text[max 2500] -> step format_badge: in=text[max 50], out=text[max 50] -> step display_badge: in=text, out=text

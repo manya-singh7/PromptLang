@@ -1,0 +1,1 @@
+step stream_chat: in=text, out=text -> step limit_buffer: in=text[max 2048], out=text[max 1024] -> step compress_tokens: in=text[max 1024], out=text[max 512] -> step send_pager: in=text[max 128], out=text

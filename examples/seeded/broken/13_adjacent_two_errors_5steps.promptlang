@@ -1,0 +1,1 @@
+step fetch_posts: in=text, out=list -> step filter_active: in=list, out=json -> step cluster_topics: in=text, out=list -> step aggregate_counts: in=json, out=json -> step render_page: in=json, out=text
