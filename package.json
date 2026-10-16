@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "vitest run",
-    "build:web": "esbuild web/app.ts --bundle --outfile=web/app.js"
+    "build:web": "esbuild web/app.ts --bundle --outfile=web/app.js",
+    "validate:seeded": "tsx scripts/validate-seeded.ts"
   },
   "repository": {
     "type": "git",

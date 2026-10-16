@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { tokenize, parse, Step } from "../parser/parser";
+import { tokenize, parse, type Step } from "../parser/parser";
 
 export interface ManifestEntry {
   file: string;
@@ -210,6 +210,27 @@ export function validateSeeded(baseDir?: string): ValidationResult {
     }
     if (!entry.note || typeof entry.note !== "string" || entry.note.trim().length === 0) {
       errors.push(`File ${entry.file} missing or empty note in manifest`);
+    }
+  }
+
+  // Structural rules for the seeded set
+  const expectCount = (label: string, actual: number, expected: number) => {
+    if (actual !== expected) errors.push(`Expected ${expected} ${label}, found ${actual}`);
+  };
+  expectCount("files in broken/", diskBrokenFiles.length, 30);
+  expectCount("files in valid/", diskValidFiles.length, 10);
+  expectCount("type-mismatch entries", manifest.filter((m) => m.category === "type-mismatch").length, 15);
+  expectCount("limit-violation entries", manifest.filter((m) => m.category === "limit-violation").length, 15);
+
+  for (const f of allDiskFiles) {
+    if (!/^(broken|valid)\/\d{2}_[A-Za-z0-9_]+\.promptlang$/.test(f)) {
+      errors.push(`File name does not match NN_<short_reason>.promptlang: ${f}`);
+    }
+  }
+  for (const entry of manifest) {
+    const folder = entry.file.split("/")[0];
+    if ((folder === "valid") !== entry.valid) {
+      errors.push(`File ${entry.file} is in ${folder}/ but manifest says valid=${entry.valid}`);
     }
   }
 
