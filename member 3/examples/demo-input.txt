@@ -1,0 +1,1 @@
+Summarize the article in two sentences, then format the summary as a short list for an email.
