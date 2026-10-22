@@ -131,3 +131,20 @@ codegen/            Empty, reserved for the code generator
 - Manya Singh (24BCE2401)
 - Akash Jagannadh Bommisetty (24BCE2791)
 - Kuppili Sai Prapoorn (24BCE2806)
+
+## Runtime demo
+
+The runtime code is in `runtime/`. It uses the shared parser and checks every chain before a model call. Mock mode is the default, so a key is not needed. Mock results are sample text. The cost rates shown in mock mode are illustrative values, not a provider's real prices.
+
+From the repository root:
+
+```powershell
+npm install
+npm test
+npm run runtime:demo
+npm run runtime
+```
+
+`npm run runtime:demo` reads `examples/demo-input.txt` and tries one valid chain, one broken chain that must be blocked before a call, and one chain stopped by a runtime length limit. `npm run runtime` starts the web panel at `http://127.0.0.1:4174`; it shows the rough estimate before each run.
+
+The runtime currently imports the checker from `web/check.ts` as a stand-in while PR #13 is open. After that PR is merged, update the import to `semantic/checkChain.ts` and rerun `npm test`. For setup notes and optional API mode, see [`runtime/README.md`](runtime/README.md).

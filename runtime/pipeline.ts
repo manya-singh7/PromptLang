@@ -11,13 +11,30 @@ export interface PipelineResult {
   errors: string[];
 }
 
+export function getChainErrors(steps: PromptStep[], checks: ChainCheck[]): string[] {
+  const errors: string[] = [];
+  for (let index = 0; index < steps.length - 1; index++) {
+    const current = steps[index]!;
+    const next = steps[index + 1]!;
+    const check = checks.find((item) => item.fromIndex === index);
+    if (!check) {
+      errors.push("No type check result was returned for the step " + current.name + " -> " + next.name);
+      continue;
+    }
+    if (check.ok) continue;
+    const safeListFix = check.fix === "list-to-text" && current.outType === "list" && next.inType === "text";
+    if (!safeListFix) errors.push(check.message ?? "Type mismatch between " + current.name + " and " + next.name);
+  }
+  return errors;
+}
+
 export function compileChain(
   steps: PromptStep[],
   input: string,
   checks: ChainCheck[],
   prices: PriceSettings,
 ): PipelineResult {
-  const errors = checks.filter((check) => !check.ok && !check.fix).map((check) => check.message ?? `Type mismatch on arrow ${check.fromIndex + 1}`);
+  const errors = getChainErrors(steps, checks);
   const executableSteps = addSafeFixes(steps, checks);
   return {
     steps,

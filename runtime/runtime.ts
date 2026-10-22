@@ -10,10 +10,9 @@ export interface TokenUsage {
 export function makeApiCall(settings: ModelSettings, onUsage?: (usage: TokenUsage) => void): ModelCall {
   if (settings.mode === "mock") {
     return async (step, input) => {
-      const text = `Mock result for ${step.name}.`;
+      const text = `Sample mock output for ${step.name}.`;
       if (step.outType === "json") return JSON.stringify({ mock: true, step: step.name });
-      if (step.outType === "list") return JSON.stringify([`Mock item from ${step.name}`]);
-      if (step.outMax !== undefined) return text.slice(0, step.outMax);
+      if (step.outType === "list") return JSON.stringify([`Sample mock item from ${step.name}`]);
       return text;
     };
   }

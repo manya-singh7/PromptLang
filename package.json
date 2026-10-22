@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "build:web": "esbuild web/app.ts --bundle --outfile=web/app.js",
-    "validate:seeded": "tsx scripts/validate-seeded.ts"
+    "validate:seeded": "tsx scripts/validate-seeded.ts",
+    "runtime": "tsx runtime/start.ts",
+    "runtime:demo": "tsx runtime/cli.ts demo"
   },
   "repository": {
     "type": "git",
