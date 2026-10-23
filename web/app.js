@@ -218,32 +218,74 @@
     }
   });
 
-  // web/check.ts
+  // semantic/checkChain.ts
   function checkChain(steps) {
     const results = [];
     for (let i = 0; i < steps.length - 1; i++) {
       const current = steps[i];
       const next = steps[i + 1];
-      if (!current || !next) continue;
-      const ok = current.outType === next.inType;
-      if (ok) {
-        results.push({
-          fromIndex: i,
-          ok: true
-        });
-      } else {
+      const fromType = current.outType;
+      const toType = next.inType;
+      if (fromType === "list" && toType === "text") {
         results.push({
           fromIndex: i,
           ok: false,
-          message: `step "${current.name}" outputs ${current.outType} but step "${next.name}" expects ${next.inType}`
+          message: `Step "${current.name}" outputs list, but step "${next.name}" expects text.`,
+          fix: "list-to-text"
         });
+        continue;
       }
+      if (fromType !== toType) {
+        results.push({
+          fromIndex: i,
+          ok: false,
+          message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".`
+        });
+        continue;
+      }
+      if (fromType !== "text" && (current.outMax !== void 0 || next.inMax !== void 0)) {
+        results.push({
+          fromIndex: i,
+          ok: false,
+          message: `Length limits are only allowed on text. Check steps "${current.name}" and "${next.name}".`
+        });
+        continue;
+      }
+      if (fromType === "text") {
+        const outputLimit = current.outMax;
+        const inputLimit = next.inMax;
+        if (outputLimit === void 0 && inputLimit !== void 0) {
+          results.push({
+            fromIndex: i,
+            ok: false,
+            message: `Step "${current.name}" has unlimited text output, but step "${next.name}" accepts at most ${inputLimit} characters.`
+          });
+          continue;
+        }
+        if (outputLimit !== void 0 && inputLimit !== void 0 && inputLimit < outputLimit) {
+          results.push({
+            fromIndex: i,
+            ok: false,
+            message: `Step "${current.name}" may output ${outputLimit} characters, but step "${next.name}" accepts only ${inputLimit}.`
+          });
+          continue;
+        }
+      }
+      results.push({ fromIndex: i, ok: true });
     }
     return results;
   }
+  var init_checkChain = __esm({
+    "semantic/checkChain.ts"() {
+      "use strict";
+    }
+  });
+
+  // web/check.ts
   var init_check = __esm({
     "web/check.ts"() {
       "use strict";
+      init_checkChain();
     }
   });
 
