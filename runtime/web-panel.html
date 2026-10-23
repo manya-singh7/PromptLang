@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PromptLang Run Panel</title>
+  <title>PromptLang Runtime Demo</title>
   <style>
     body { max-width: 760px; margin: 32px auto; padding: 0 16px; font: 16px Arial, sans-serif; }
     textarea { box-sizing: border-box; width: 100%; min-height: 100px; margin: 8px 0 16px; padding: 10px; }
@@ -12,16 +12,15 @@
   </style>
 </head>
 <body>
-  <h1>PromptLang Run Panel</h1>
+  <h1>PromptLang Runtime Demo</h1>
   <label for="source-input">Chain</label>
   <textarea id="source-input" placeholder="Example: step summarize: in=text, out=text"></textarea>
   <label for="run-input">Input text</label>
   <textarea id="run-input" placeholder="Enter the text that the first step should receive"></textarea>
-  <label for="retry-count">Repeated failed runs avoided (assumption)</label>
-  <input id="retry-count" type="number" min="0" value="3">
-  <button id="run-without-checking" type="button">Run without checking</button>
-  <button id="check-first" type="button">Check first</button>
+  <button id="check-and-run" type="button">Check chain and run</button>
+  <h2>Estimate before run</h2>
   <p id="run-estimate" aria-live="polite"></p>
+  <h2>Output</h2>
   <pre id="run-output" aria-live="polite"></pre>
   <script src="/web-panel.js"></script>
 </body>

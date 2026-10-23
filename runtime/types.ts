@@ -1,18 +1,12 @@
-export interface PromptStep {
-  name: string;
-  inType: string;
-  outType: string;
-  inMax?: number;
-  outMax?: number;
-  inserted?: boolean;
-}
+import type { Step } from "../parser/parser.ts";
 
-// B's checker can return this small object for each arrow.
+export type PromptStep = Step & { inserted?: boolean };
+
 export interface ChainCheck {
   fromIndex: number;
   ok: boolean;
   message?: string;
-  fix?: "list-to-text";
+  fix?: string;
 }
 
 export interface ModelSettings {
@@ -29,4 +23,3 @@ export interface PriceSettings {
   outputUsdPerMillion: number;
   expectedOutputCharsPerStep: number;
 }
-
