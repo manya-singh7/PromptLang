@@ -84,22 +84,23 @@ PromptLang supports non-linear pipelines with fan-out branching and fan-in joins
 - **Topological Cycle Detection**: Graph structure is checked with Kahn's topological sort algorithm in the semantic analyzer. Cycles, dangling references, duplicate branch names, and unreachable steps are caught statically.
 - **Parallel Async Execution**: During runtime execution, independent branch steps are executed concurrently via `Promise.all` in topological order, forwarding outputs along resolved dependencies.
 
-## Empirical Savings Benchmark
+## Simulated Savings Benchmark
 
-PromptLang includes an automated empirical benchmark script (`scripts/benchmark-savings.ts`) that measures the cost, token, and latency savings of PromptLang's static type checker vs. naive sequential runtime execution across 40 seeded pipelines (30 broken pipelines and 10 valid reference chains).
+PromptLang includes an automated simulation benchmark script (`scripts/benchmark-savings.ts`) that models the cost, token, and latency savings of PromptLang's static type checker vs. naive sequential runtime execution across 40 seeded pipelines (30 broken pipelines and 10 valid reference chains).
 
 ### Key Results Across Model Presets
 
-| Model / Provider Preset | Input Rate (/1M) | Output Rate (/1M) | Prevented API Calls | Prevented Token Waste | Net Dollars Saved ($) | Latency Saved (s) | Static Check Overhead |
+| Model / Provider Preset | Input Rate (/1M) | Output Rate (/1M) | Prevented API Calls | Prevented Token Waste | Net Dollars Saved ($) | Modeled Latency Saved (s) | Static Check Overhead |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
 | **GPT-4o** (OpenAI) | $2.50 | $10.00 | **52** | **10,640** | **$0.0725** | **62.4s** | 0.026 ms |
 | **Claude 3.5 Sonnet** (Anthropic) | $3.00 | $15.00 | **52** | **10,640** | **$0.1054** | **78.0s** | 0.004 ms |
 | **Gemini 1.5 Flash** (Google) | $0.075 | $0.30 | **52** | **10,640** | **$0.0022** | **31.2s** | 0.004 ms |
 | **PromptLang Sample** (Mock) | $0.25 | $1.50 | **52** | **10,640** | **$0.0103** | **52.0s** | 0.004 ms |
 
-- **52 Prevented API Calls**: 100% of broken pipelines are blocked upfront before any model call is dispatched.
-- **Zero False Positives**: All 10 valid reference chains pass verification and run to completion (100% precision).
-- **Instant Verification**: Static checking runs in **0.004–0.026 ms** per pipeline—over **40,000x faster** than waiting for an API call to fail at runtime.
+- **52 Prevented API Calls**: 100% of broken pipelines in the seeded test set are blocked upfront before any model call is dispatched.
+- **Valid Reference Chains**: All 10 valid reference chains pass verification and run to completion in simulation.
+- **Verification Overhead**: Static checking runs in **0.004–0.026 ms** per pipeline; compared to assumed step latencies (600–1,500 ms), static rejection avoids waiting for failing network roundtrips.
+- **Assumptions**: Assumes 500 characters (~125 tokens) per unconstrained step, stated per-step latencies, and example provider pricing rates from October 2024.
 
 Detailed results and per-pipeline breakdowns are stored in [`runtime/deliverables/benchmark-results.md`](runtime/deliverables/benchmark-results.md).
 
@@ -111,7 +112,7 @@ npm install
 # Run all 125 unit & integration tests
 npm test
 
-# Run the empirical benchmark suite (measures prevented calls, tokens, and dollar savings)
+# Run the simulated benchmark suite (models prevented calls, tokens, and dollar savings)
 npm run benchmark
 
 # Check the 40 seeded test chains against their manifest
@@ -149,7 +150,7 @@ runtime/
   autofix.ts          Safe adapter insertion (e.g., list-to-text)
   codegen.ts          Code generation from verified pipelines
   deliverables/
-    benchmark-results.md  Empirical benchmark results across provider presets
+    benchmark-results.md  Simulated benchmark results across provider presets
     paper-section-3.md    Draft section for research paper
 web/
   index.html          Interactive web UI
@@ -158,7 +159,7 @@ web/
 examples/
   seeded/             40 standardized test chains (30 broken, 10 valid) with manifest.json
 scripts/
-  benchmark-savings.ts Automated empirical benchmark script (`npm run benchmark`)
+  benchmark-savings.ts Automated simulation benchmark script (`npm run benchmark`)
   validate-seeded.ts   Verifies seeded test chains against manifest.json
 tests/                Vitest test suites (125 tests across 10 test files)
 ```
@@ -175,9 +176,9 @@ tests/                Vitest test suites (125 tests across 10 test files)
 | DAG branching & parallel runtime | Done | Fan-out `A -> (B, C)`, fan-in `(B, C) -> D`, parallel `Promise.all` execution in topological order |
 | Runtime guards & API blocker | Done | Validates input/output types and limits at runtime; blocks broken chains before any model call |
 | Cost & time estimate | Done | Calculates input/output token counts, dollar cost, and latency estimates before execution |
-| Empirical benchmark suite | Done | `npm run benchmark` measures prevented calls, token waste, and dollar savings across model presets |
+| Simulated benchmark suite | Done | `npm run benchmark` simulates prevented calls, token waste, and dollar savings across model presets |
 | Automatic safe fixes | Done | Safe insertion of `list-to-text` adapter steps |
-| Web chain diagram | Done | Visual DAG rendering, color-coded contract compatibility, interactive error reporting |
+| Web chain diagram | Done | Draws linear steps or side-by-side branch stages with green/red arrows, error messages, and an illustrative cost estimate |
 | 40 seeded test chains with validator | Done | `npm run validate:seeded` (30 broken, 10 valid) |
 | Automated test suite | Done | 125 tests across 10 test files with Vitest |
 | CI | Done | GitHub Actions runs tests on every push and pull request |

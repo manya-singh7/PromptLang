@@ -9,7 +9,7 @@ import {
 } from "../scripts/benchmark-savings";
 import { parse, tokenize } from "../parser/parser";
 
-describe("empirical savings benchmark runner", () => {
+describe("simulated savings benchmark runner", () => {
   it("executes the full benchmark across all seeded chains without error", () => {
     const deliverablePath = path.resolve(__dirname, "../runtime/deliverables/benchmark-results.md");
     const result = runBenchmark({ silent: true, deliverablePath });
@@ -42,8 +42,8 @@ describe("empirical savings benchmark runner", () => {
     // Verify markdown deliverable file is written
     expect(fs.existsSync(deliverablePath)).toBe(true);
     const content = fs.readFileSync(deliverablePath, "utf-8");
-    expect(content).toContain("# PromptLang Empirical Savings Benchmark Results");
-    expect(content).toContain("Total Prevented API Calls");
+    expect(content).toContain("# PromptLang Simulated Savings Benchmark Results");
+    expect(content).toContain("Prevented API Calls");
     expect(content).toContain("GPT-4o");
     expect(content).toContain("Claude 3.5 Sonnet");
     expect(content).toContain("Gemini 1.5 Flash");

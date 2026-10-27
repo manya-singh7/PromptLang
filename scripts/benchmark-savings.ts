@@ -420,16 +420,26 @@ export function formatMarkdownReport(suite: BenchmarkSuiteResult): string {
 
   const lines: string[] = [];
 
-  lines.push("# PromptLang Empirical Savings Benchmark Results");
+  lines.push("# PromptLang Simulated Savings Benchmark Results");
   lines.push("");
   lines.push(`Generated: ${suite.timestamp}`);
   lines.push("");
-  lines.push("## 1. Executive Summary");
+  lines.push("## 1. Simulation Methodology & Key Assumptions");
   lines.push("");
   lines.push(
-    "This benchmark measures the quantitative savings achieved by PromptLang's static type checker vs. naive runtime execution across 40 seeded pipelines (30 broken pipelines exhibiting type mismatches and length limit violations, and 10 valid reference pipelines)."
+    "This benchmark is a **simulation** (not an empirical measurement of live provider billing or live API latency). It models the quantitative savings of PromptLang's static type checker vs. naive runtime execution across 40 seeded pipelines (30 broken pipelines exhibiting type mismatches and length limit violations, and 10 valid reference pipelines)."
   );
   lines.push("");
+  lines.push("### Explicit Simulation Assumptions:");
+  lines.push("- **Assumed Output Tokens per Wasted Call**: Unbounded text steps and structured JSON/list steps are modeled assuming 500 output characters (~125 tokens per step at 4 chars/token). Steps with declared `outMax` are modeled as `min(500, outMax)` characters.");
+  lines.push("- **Assumed Latency per Step**:");
+  lines.push("  - **GPT-4o**: assumed 1,200 ms per step");
+  lines.push("  - **Claude 3.5 Sonnet**: assumed 1,500 ms per step");
+  lines.push("  - **Gemini 1.5 Flash**: assumed 600 ms per step");
+  lines.push("  - **PromptLang Sample**: assumed 1,000 ms per step");
+  lines.push("- **Example Provider Pricing (October 2024)**: Provider token prices are example benchmark rates set as of **October 2024** and may be out of date. Actual costs will vary with provider rate updates, volume discounts, batch APIs, and prompt caching.");
+  lines.push("");
+  lines.push("### Execution Models:");
   lines.push(
     "- **PromptLang Guarded Execution**: Statically validates prompt contract compatibility and length limits before making any model calls. When a chain contains a type mismatch or contract violation, it blocks execution immediately with **0 tokens consumed, 0 API calls made, and $0.00 spent**."
   );
@@ -437,9 +447,9 @@ export function formatMarkdownReport(suite: BenchmarkSuiteResult): string {
     "- **Naive Runtime Baseline**: Executes steps sequentially until the runtime crashes at the mismatched step. All API calls, token usage, dollar spend, and network latency incurred prior to the failure are completely wasted."
   );
   lines.push("");
-  lines.push("### Overall Across Presets");
+  lines.push("### Modeled Results Across Presets");
   lines.push("");
-  lines.push("| Model / Provider Preset | Input Rate (/1M) | Output Rate (/1M) | Prevented API Calls | Prevented Tokens | Net Dollars Saved ($) | Time Saved (s) | Avg Check Overhead |");
+  lines.push("| Model / Provider Preset | Input Rate (/1M) | Output Rate (/1M) | Prevented API Calls | Prevented Tokens | Net Dollars Saved ($) | Modeled Time Saved (s) | Avg Check Overhead |");
   lines.push("| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: |");
 
   for (const key of presetKeys) {
@@ -458,14 +468,14 @@ export function formatMarkdownReport(suite: BenchmarkSuiteResult): string {
   }
 
   lines.push("");
-  lines.push("## 2. Key Quantitative Findings for Paper Section 3");
+  lines.push("## 2. Key Findings for Paper Section 3");
   lines.push("");
-  lines.push(`- **Total Prevented API Calls**: **${primary.totalPreventedApiCalls} calls** across 30 broken pipelines (100% of preventable failed runs blocked upfront).`);
-  lines.push(`- **Total Prevented Token Waste**: **${primary.totalPreventedTokens.toLocaleString()} tokens** (${primary.totalPreventedInputTokens.toLocaleString()} input tokens + ${primary.totalPreventedOutputTokens.toLocaleString()} output tokens).`);
-  lines.push(`- **Net Financial Waste Prevented**: Up to **$${suite.presets["claude-3-5-sonnet"] ? suite.presets["claude-3-5-sonnet"].totalNetDollarsSaved.toFixed(4) : primary.totalNetDollarsSaved.toFixed(4)}** for Claude 3.5 Sonnet and **$${primary.totalNetDollarsSaved.toFixed(4)}** for GPT-4o per single test suite pass.`);
-  lines.push(`- **Total Developer Time Saved**: **${primary.totalTimeSavedSeconds.toFixed(1)} seconds** of waiting for failed API roundtrips.`);
-  lines.push(`- **Static Check Speedup**: Upfront type check executes in **${primary.averageCheckTimeMs.toFixed(3)} ms** per pipeline, which is **>${Math.round((primary.preset.latencyPerStepMs / primary.averageCheckTimeMs)).toLocaleString()}x faster** than waiting for an API call to fail.`);
-  lines.push(`- **Zero False Positives**: All 10 valid pipelines passed static check without interference (100% completion rate).`);
+  lines.push(`- **Modeled Prevented API Calls**: **${primary.totalPreventedApiCalls} calls** across 30 broken pipelines (100% of preventable failed runs blocked upfront).`);
+  lines.push(`- **Modeled Prevented Token Waste**: **${primary.totalPreventedTokens.toLocaleString()} tokens** (${primary.totalPreventedInputTokens.toLocaleString()} input tokens + ${primary.totalPreventedOutputTokens.toLocaleString()} output tokens).`);
+  lines.push(`- **Modeled Net Dollars Saved**: Up to **$${suite.presets["claude-3-5-sonnet"] ? suite.presets["claude-3-5-sonnet"].totalNetDollarsSaved.toFixed(4) : primary.totalNetDollarsSaved.toFixed(4)}** for Claude 3.5 Sonnet and **$${primary.totalNetDollarsSaved.toFixed(4)}** for GPT-4o per simulated test suite pass.`);
+  lines.push(`- **Modeled Time Saved**: **${primary.totalTimeSavedSeconds.toFixed(1)} seconds** of avoided roundtrip latency (calculated using the assumed ${primary.preset.latencyPerStepMs} ms latency per step).`);
+  lines.push(`- **Static Check Verification**: Upfront type check executes in **${primary.averageCheckTimeMs.toFixed(3)} ms** per pipeline; compared to the assumed network latency of ${primary.preset.latencyPerStepMs} ms per step, static check rejection avoids waiting for failing network roundtrips.`);
+  lines.push(`- **Valid Reference Chains**: All 10 valid reference pipelines in the test set passed static checking and simulated execution to completion without being blocked.`);
   lines.push("");
 
   lines.push("## 3. Detailed Per-Chain Breakdown (30 Broken Pipelines)");
@@ -515,7 +525,7 @@ export function formatMarkdownReport(suite: BenchmarkSuiteResult): string {
 export function formatConsoleSummary(suite: BenchmarkSuiteResult): string {
   const lines: string[] = [];
   lines.push("================================================================================");
-  lines.push("                PROMPTLANG EMPIRICAL SAVINGS BENCHMARK SUMMARY                  ");
+  lines.push("                PROMPTLANG SIMULATED SAVINGS BENCHMARK SUMMARY                  ");
   lines.push("================================================================================");
   lines.push("");
   lines.push("| Model Preset | Prevented Calls | Prevented Tokens | Net Saved ($) | Time Saved (s) | Check Time |");
