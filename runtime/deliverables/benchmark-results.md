@@ -1,6 +1,6 @@
 # PromptLang Empirical Savings Benchmark Results
 
-Generated: 2026-10-27T21:40:59.928Z
+Generated: 2026-10-27T22:02:58.275Z
 
 ## 1. Executive Summary
 
@@ -13,10 +13,10 @@ This benchmark measures the quantitative savings achieved by PromptLang's static
 
 | Model / Provider Preset | Input Rate (/1M) | Output Rate (/1M) | Prevented API Calls | Prevented Tokens | Net Dollars Saved ($) | Time Saved (s) | Avg Check Overhead |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **GPT-4o** (OpenAI) | $2.50 | $10.00 | 52 | 10,640 | **$0.0725** | 62.4s | 0.052 ms |
-| **Claude 3.5 Sonnet** (Anthropic) | $3.00 | $15.00 | 52 | 10,640 | **$0.1054** | 78.0s | 0.008 ms |
-| **Gemini 1.5 Flash** (Google) | $0.075 | $0.30 | 52 | 10,640 | **$0.0022** | 31.2s | 0.033 ms |
-| **PromptLang Sample** (Sample Preset) | $0.25 | $1.50 | 52 | 10,640 | **$0.0103** | 52.0s | 0.003 ms |
+| **GPT-4o** (OpenAI) | $2.50 | $10.00 | 52 | 10,640 | **$0.0725** | 62.4s | 0.034 ms |
+| **Claude 3.5 Sonnet** (Anthropic) | $3.00 | $15.00 | 52 | 10,640 | **$0.1054** | 78.0s | 0.013 ms |
+| **Gemini 1.5 Flash** (Google) | $0.075 | $0.30 | 52 | 10,640 | **$0.0022** | 31.2s | 0.015 ms |
+| **PromptLang Sample** (Sample Preset) | $0.25 | $1.50 | 52 | 10,640 | **$0.0103** | 52.0s | 0.005 ms |
 
 ## 2. Key Quantitative Findings for Paper Section 3
 
@@ -24,7 +24,7 @@ This benchmark measures the quantitative savings achieved by PromptLang's static
 - **Total Prevented Token Waste**: **10,640 tokens** (4,514 input tokens + 6,126 output tokens).
 - **Net Financial Waste Prevented**: Up to **$0.1054** for Claude 3.5 Sonnet and **$0.0725** for GPT-4o per single test suite pass.
 - **Total Developer Time Saved**: **62.4 seconds** of waiting for failed API roundtrips.
-- **Static Check Speedup**: Upfront type check executes in **0.052 ms** per pipeline, which is **>22,930x faster** than waiting for an API call to fail.
+- **Static Check Speedup**: Upfront type check executes in **0.034 ms** per pipeline, which is **>35,016x faster** than waiting for an API call to fail.
 - **Zero False Positives**: All 10 valid pipelines passed static check without interference (100% completion rate).
 
 ## 3. Detailed Per-Chain Breakdown (30 Broken Pipelines)
@@ -68,16 +68,16 @@ Breakdown using **GPT-4o** rates ($2.5/M in, $10/M out):
 
 | File | Total Steps | Naive Result | Guarded Result | Static Check Time | Completed Calls |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| `01_plain_text_2steps.promptlang` | 2 | Completed | Completed | 0.005 ms | 2 |
-| `02_smaller_limit_to_larger_2steps.promptlang` | 2 | Completed | Completed | 0.006 ms | 2 |
-| `03_equal_limits_2steps.promptlang` | 2 | Completed | Completed | 0.005 ms | 2 |
-| `04_limit_into_unbounded_3steps.promptlang` | 3 | Completed | Completed | 0.007 ms | 3 |
-| `05_plain_json_and_list_3steps.promptlang` | 3 | Completed | Completed | 0.006 ms | 3 |
-| `06_tightening_and_widening_limits_4steps.promptlang` | 4 | Completed | Completed | 0.007 ms | 4 |
-| `07_mixed_types_with_limits_4steps.promptlang` | 4 | Completed | Completed | 0.011 ms | 4 |
-| `08_chain_of_five_steps.promptlang` | 5 | Completed | Completed | 0.010 ms | 5 |
-| `09_homogeneous_list_chain_5steps.promptlang` | 5 | Completed | Completed | 0.009 ms | 5 |
-| `10_six_steps_full_variety.promptlang` | 6 | Completed | Completed | 0.010 ms | 6 |
+| `01_plain_text_2steps.promptlang` | 2 | Completed | Completed | 0.006 ms | 2 |
+| `02_smaller_limit_to_larger_2steps.promptlang` | 2 | Completed | Completed | 0.007 ms | 2 |
+| `03_equal_limits_2steps.promptlang` | 2 | Completed | Completed | 0.006 ms | 2 |
+| `04_limit_into_unbounded_3steps.promptlang` | 3 | Completed | Completed | 0.008 ms | 3 |
+| `05_plain_json_and_list_3steps.promptlang` | 3 | Completed | Completed | 0.009 ms | 3 |
+| `06_tightening_and_widening_limits_4steps.promptlang` | 4 | Completed | Completed | 0.013 ms | 4 |
+| `07_mixed_types_with_limits_4steps.promptlang` | 4 | Completed | Completed | 0.017 ms | 4 |
+| `08_chain_of_five_steps.promptlang` | 5 | Completed | Completed | 0.018 ms | 5 |
+| `09_homogeneous_list_chain_5steps.promptlang` | 5 | Completed | Completed | 0.016 ms | 5 |
+| `10_six_steps_full_variety.promptlang` | 6 | Completed | Completed | 0.020 ms | 6 |
 
 ---
 *Data generated automatically by `scripts/benchmark-savings.ts`.*
