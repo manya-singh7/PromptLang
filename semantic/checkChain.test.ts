@@ -1,4 +1,3 @@
-
 import { describe, it, expect } from "vitest";
 import { checkChain } from "./checkChain";
 import type { Step } from "../parser/parser";
@@ -90,6 +89,95 @@ describe("checkChain", () => {
     ];
 
     expect(checkChain(steps)).toEqual([]);
+  });
+
+  it("accepts valid width subtyping when output satisfies all required fields of input", () => {
+    const steps: Step[] = [
+      { name: "fetch", inType: "text", outType: "json{title:text,tags:list,author:text}" },
+      { name: "render", inType: "json{title:text,tags:list}", outType: "text" },
+    ];
+
+    const results = checkChain(steps);
+    expect(results).toEqual([{ fromIndex: 0, ok: true }]);
+  });
+
+  it("accepts property matching regardless of field declaration order", () => {
+    const steps: Step[] = [
+      { name: "fetch", inType: "text", outType: "json{tags:list,title:text}" },
+      { name: "render", inType: "json{title:text,tags:list}", outType: "text" },
+    ];
+
+    const results = checkChain(steps);
+    expect(results).toEqual([{ fromIndex: 0, ok: true }]);
+  });
+
+  it("flags generic json into typed json as a type mismatch by default", () => {
+    const steps: Step[] = [
+      { name: "raw", inType: "text", outType: "json" },
+      { name: "process", inType: "json{title:text,tags:list}", outType: "text" },
+    ];
+
+    const results = checkChain(steps);
+    expect(results[0]?.ok).toBe(false);
+    expect(results[0]?.message).toContain('Generic "json" cannot satisfy typed schema');
+  });
+
+  it("allows generic json into typed json when explicitly configured", () => {
+    const steps: Step[] = [
+      { name: "raw", inType: "text", outType: "json" },
+      { name: "process", inType: "json{title:text,tags:list}", outType: "text" },
+    ];
+
+    const results = checkChain(steps, { allowGenericJson: true });
+    expect(results[0]?.ok).toBe(true);
+  });
+
+  it("accepts typed json output feeding generic json input", () => {
+    const steps: Step[] = [
+      { name: "typed", inType: "text", outType: "json{title:text}" },
+      { name: "consumer", inType: "json", outType: "text" },
+    ];
+
+    const results = checkChain(steps);
+    expect(results).toEqual([{ fromIndex: 0, ok: true }]);
+  });
+
+  it("flags missing required keys with a clear error message", () => {
+    const steps: Step[] = [
+      { name: "A", inType: "text", outType: "json{title:text}" },
+      { name: "B", inType: "json{title:text,tags:list}", outType: "text" },
+    ];
+
+    const results = checkChain(steps);
+    expect(results[0]?.ok).toBe(false);
+    expect(results[0]?.message).toContain('Missing required field "tags"');
+  });
+
+  it("reports exact field-level mismatch error message when field types mismatch", () => {
+    const steps: Step[] = [
+      { name: "A", inType: "text", outType: "json{title:text,tags:list}" },
+      { name: "B", inType: "json{title:text,tags:text}", outType: "text" },
+    ];
+
+    const results = checkChain(steps);
+    expect(results[0]?.ok).toBe(false);
+    expect(results[0]?.message).toContain('Field "tags" type mismatch: expected "text", but got "list"');
+  });
+
+  it("supports nested schema subtyping and detects nested field mismatch", () => {
+    const validNestedSteps: Step[] = [
+      { name: "A", inType: "text", outType: "json{meta:json{id:text,count:number},title:text}" },
+      { name: "B", inType: "json{meta:json{id:text}}", outType: "text" },
+    ];
+    expect(checkChain(validNestedSteps)[0]?.ok).toBe(true);
+
+    const invalidNestedSteps: Step[] = [
+      { name: "A", inType: "text", outType: "json{meta:json{id:number}}" },
+      { name: "B", inType: "json{meta:json{id:text}}", outType: "text" },
+    ];
+    const invalidResult = checkChain(invalidNestedSteps)[0]!;
+    expect(invalidResult.ok).toBe(false);
+    expect(invalidResult.message).toContain('Field "meta.id" type mismatch: expected "text", but got "number"');
   });
 
   it("catches all broken seeded chains and accepts all valid ones", () => {

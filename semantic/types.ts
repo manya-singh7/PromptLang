@@ -1,1 +1,1 @@
-export type PromptType = "text" | "list" | "json";
+export type PromptType = "text" | "list" | "json" | string;

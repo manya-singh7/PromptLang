@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { tokenize, parse, type Step } from "../parser/parser";
+import { checkTypeSubtype } from "../semantic/typeChecker";
 
 export interface ManifestEntry {
   file: string;
@@ -24,7 +25,7 @@ export function checkSubtype(
   nextInType: string,
   nextInMax: number | undefined
 ): { ok: boolean; reason?: "type-mismatch" | "limit-violation" } {
-  if (prevOutType !== nextInType) {
+  if (!checkTypeSubtype(prevOutType, nextInType).ok) {
     return { ok: false, reason: "type-mismatch" };
   }
   if (prevOutType === "text") {

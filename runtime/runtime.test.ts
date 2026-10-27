@@ -25,7 +25,7 @@ describe("runtime integration", () => {
   });
 
   it("does not generate code for a broken project-checked chain", () => {
-    const steps = parseChainSource("step format: in=text, out=list -> step email: in=text, out=text");
+    const steps = parseChainSource("step format: in=text, out=json -> step email: in=text, out=text");
     const checks = checkChain(steps);
     expect(checks[0]?.ok).toBe(false);
     expect(compileChain(steps, "article", checks, prices).generatedCode).toBe("");
@@ -47,6 +47,82 @@ describe("runtime integration", () => {
     expect(checkRuntimeValue({ name: "items", inType: "text", outType: "list" }, "[1,2]")).toEqual([1, 2]);
     expect(() => checkRuntimeValue({ name: "items", inType: "text", outType: "list" }, "not a list"))
       .toThrow(/JSON list/);
+  });
+
+  it("enforces schema-aware JSON typing at runtime", () => {
+    const step: PromptStep = {
+      name: "extract",
+      inType: "text",
+      outType: "json{title:text,tags:list,count:number,active:boolean}",
+    };
+
+    // Valid object
+    const validJsonStr = JSON.stringify({
+      title: "My Article",
+      tags: ["news", "tech"],
+      count: 42,
+      active: true,
+      extra: "allowed by width subtyping",
+    });
+    expect(checkRuntimeValue(step, validJsonStr)).toEqual({
+      title: "My Article",
+      tags: ["news", "tech"],
+      count: 42,
+      active: true,
+      extra: "allowed by width subtyping",
+    });
+
+    // Already parsed object
+    expect(
+      checkRuntimeValue(step, {
+        title: "My Article",
+        tags: ["news"],
+        count: 10,
+        active: false,
+      })
+    ).toEqual({
+      title: "My Article",
+      tags: ["news"],
+      count: 10,
+      active: false,
+    });
+
+    // Missing required key
+    expect(() =>
+      checkRuntimeValue(
+        step,
+        JSON.stringify({ title: "No tags", count: 1, active: true })
+      )
+    ).toThrow(/missing required field "tags"/i);
+
+    // Mismatched primitive type: tags is string instead of list
+    expect(() =>
+      checkRuntimeValue(
+        step,
+        JSON.stringify({
+          title: "Bad tags",
+          tags: "not-a-list",
+          count: 1,
+          active: true,
+        })
+      )
+    ).toThrow(/field "tags" expected list/i);
+
+    // Mismatched primitive type: count is string instead of number
+    expect(() =>
+      checkRuntimeValue(
+        step,
+        JSON.stringify({
+          title: "Bad count",
+          tags: ["a"],
+          count: "100",
+          active: true,
+        })
+      )
+    ).toThrow(/field "count" expected number/i);
+
+    // Malformed JSON string
+    expect(() => checkRuntimeValue(step, "not json")).toThrow(/not valid JSON/i);
   });
 
   it("runs steps with an injected model call", async () => {
@@ -85,7 +161,7 @@ describe("runtime integration", () => {
   it("blocks a broken CLI chain before any model call", async () => {
     const messages: string[] = [];
     const result = await runChain(
-      "step format: in=text, out=list -> step email: in=text, out=text",
+      "step format: in=text, out=json -> step email: in=text, out=text",
       "article",
       { model: mockSettings, prices },
       (line) => messages.push(line),
@@ -112,7 +188,7 @@ describe("runtime integration", () => {
       source: "step one: in=text, out=json -> step two: in=text, out=text", input: "hello",
     });
     expect(broken.status).toBe(422);
-    expect(String(broken.body.error)).toContain("outputs json");
+    expect(String(broken.body.error)).toContain('outputs "json"');
     expect(modelFactoryCalls).toBe(0);
   });
 
@@ -126,6 +202,25 @@ describe("runtime integration", () => {
     expect(String(response.body.answer)).toContain("Sample mock output");
     expect(String(response.body.estimate)).toContain("illustrative, not provider prices");
     expect(String(response.body.estimate)).toContain("no API call or charge");
+  });
+
+  it("automatically fixes list -> text and runs the chain in mock mode", async () => {
+    const steps = parseChainSource("step format: in=text, out=list -> step email: in=text, out=text");
+    const checks = checkChain(steps);
+    const compiled = compileChain(steps, "article", checks, prices);
+    expect(compiled.errors).toHaveLength(0);
+    expect(compiled.executableSteps).toHaveLength(3);
+    expect(compiled.executableSteps[1]?.inserted).toBe(true);
+
+    const handler = createRunHandler(parseChainSource, checkChain, mockSettings, prices);
+    const response = await callHandler(handler, "/api/run", {
+      source: "step format: in=text, out=list -> step email: in=text, out=text",
+      input: "article",
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.mode).toBe("mock");
+    expect(response.body.error).toBeUndefined();
+    expect(String(response.body.answer)).toContain("Sample mock output for email");
   });
 
   it("serves an empty run page with no unchecked run button", async () => {

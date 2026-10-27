@@ -1,5 +1,6 @@
-
 import type { Step } from "../parser/parser";
+import { isParameterizedJson } from "../parser/parser";
+import { checkTypeSubtype, type SubtypeOptions } from "./typeChecker";
 
 export interface ChainCheckResult {
   fromIndex: number;
@@ -12,7 +13,7 @@ export interface ChainCheckResult {
  * Checks compatibility between each pair of consecutive steps.
  * Returns one result for each arrow in the chain.
  */
-export function checkChain(steps: Step[]): ChainCheckResult[] {
+export function checkChain(steps: Step[], options?: SubtypeOptions): ChainCheckResult[] {
   const results: ChainCheckResult[] = [];
 
   for (let i = 0; i < steps.length - 1; i++) {
@@ -33,12 +34,21 @@ export function checkChain(steps: Step[]): ChainCheckResult[] {
       continue;
     }
 
-    // Other mismatched types are errors.
-    if (fromType !== toType) {
+    const sub = checkTypeSubtype(fromType, toType, options);
+    if (!sub.ok) {
+      let detail = "";
+      if (
+        sub.reason &&
+        (isParameterizedJson(fromType) ||
+          isParameterizedJson(toType) ||
+          (fromType === "json" && isParameterizedJson(toType)))
+      ) {
+        detail = ` ${sub.reason}.`;
+      }
       results.push({
         fromIndex: i,
         ok: false,
-        message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".`,
+        message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".${detail}`,
       });
       continue;
     }

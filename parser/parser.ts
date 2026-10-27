@@ -11,6 +11,57 @@ export interface Step {
   outMax?: number;
 }
 
+export interface JsonFieldDef {
+  rawType: string;
+  schema?: Record<string, JsonFieldDef>;
+}
+
+export function isParameterizedJson(type: string): boolean {
+  return typeof type === "string" && type.startsWith("json{") && type.endsWith("}");
+}
+
+export function parseJsonSchema(typeStr: string): Record<string, JsonFieldDef> | null {
+  if (!isParameterizedJson(typeStr)) return null;
+  const inner = typeStr.slice(5, -1).trim();
+  if (inner.length === 0) return {};
+
+  const fields: Record<string, JsonFieldDef> = {};
+  const fieldStrings: string[] = [];
+  let depth = 0;
+  let start = 0;
+
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (ch === "," && depth === 0) {
+      const part = inner.slice(start, i).trim();
+      if (part.length > 0) fieldStrings.push(part);
+      start = i + 1;
+    }
+  }
+  const lastPart = inner.slice(start).trim();
+  if (lastPart.length > 0) fieldStrings.push(lastPart);
+
+  for (const fieldStr of fieldStrings) {
+    const colonIdx = fieldStr.indexOf(":");
+    if (colonIdx === -1) return null;
+    const key = fieldStr.slice(0, colonIdx).trim();
+    const rawType = fieldStr.slice(colonIdx + 1).trim();
+    if (!key || !rawType) return null;
+
+    if (isParameterizedJson(rawType)) {
+      const nested = parseJsonSchema(rawType);
+      if (!nested) return null;
+      fields[key] = { rawType, schema: nested };
+    } else {
+      fields[key] = { rawType };
+    }
+  }
+
+  return fields;
+}
+
 export function tokenize(source: string): Token[] {
   const tokens: Token[] = [];
   const words = source
@@ -20,6 +71,8 @@ export function tokenize(source: string): Token[] {
     .replace(/=/g, " = ")
     .replace(/\[/g, " [ ")
     .replace(/\]/g, " ] ")
+    .replace(/\{/g, " { ")
+    .replace(/\}/g, " } ")
     .split(/\s+/)
     .filter((w) => w.length > 0);
 
@@ -34,6 +87,8 @@ export function tokenize(source: string): Token[] {
     else if (word === "=") tokens.push({ type: "EQUALS", value: word });
     else if (word === "[") tokens.push({ type: "LBRACKET", value: word });
     else if (word === "]") tokens.push({ type: "RBRACKET", value: word });
+    else if (word === "{") tokens.push({ type: "LBRACE", value: word });
+    else if (word === "}") tokens.push({ type: "RBRACE", value: word });
     else if (types.includes(word)) tokens.push({ type: "TYPE", value: word });
     else if (word === "in" || word === "out") tokens.push({ type: "PARAM", value: word });
     else if (/^-?\d+$/.test(word)) tokens.push({ type: "NUMBER", value: word });
@@ -52,6 +107,116 @@ function expect(tokens: Token[], pos: number, type: string): void {
   }
 }
 
+function parseFieldValueType(tokens: Token[], pos: number): { type: string; nextPos: number } {
+  if (!tokens[pos]) {
+    throw new ParseError(`Expected field type at token ${pos}, but got end of input`);
+  }
+
+  const token = tokens[pos]!;
+  if (token.value === "json") {
+    pos++;
+    if (tokens[pos] && (tokens[pos]!.type === "LBRACE" || tokens[pos]!.value === "{")) {
+      return parseJsonRecordType(tokens, pos);
+    }
+    return { type: "json", nextPos: pos };
+  }
+
+  const allowedFieldTypes = [
+    "text",
+    "list",
+    "number",
+    "boolean",
+    "bool",
+    "scalar",
+    "string",
+    "int",
+    "float",
+  ];
+
+  if (allowedFieldTypes.includes(token.value)) {
+    pos++;
+    return { type: token.value, nextPos: pos };
+  }
+
+  throw new ParseError(
+    `Unknown field type "${token.value}" at token ${pos}. Expected text, list, or another scalar.`
+  );
+}
+
+function parseJsonRecordType(tokens: Token[], pos: number): { type: string; nextPos: number } {
+  const bracePos = pos;
+  pos++; // consume "{"
+
+  const fields: { key: string; type: string }[] = [];
+
+  if (tokens[pos] && (tokens[pos]!.type === "RBRACE" || tokens[pos]!.value === "}")) {
+    pos++; // empty record: json{}
+    return { type: "json{}", nextPos: pos };
+  }
+
+  while (pos < tokens.length) {
+    if (!tokens[pos]) {
+      throw new ParseError(`Unclosed "{" in json schema at token ${bracePos}: unexpected end of input`);
+    }
+
+    if (
+      tokens[pos]!.type === "PARAM" &&
+      (tokens[pos]!.value === "in" || tokens[pos]!.value === "out") &&
+      tokens[pos + 1]?.type === "EQUALS"
+    ) {
+      throw new ParseError(`Missing closing "}" for json schema at token ${pos}`);
+    }
+    if (tokens[pos]!.type === "ARROW") {
+      throw new ParseError(`Missing closing "}" for json schema at token ${pos}`);
+    }
+
+    const keyToken = tokens[pos]!;
+    if (
+      keyToken.type !== "IDENTIFIER" &&
+      keyToken.type !== "PARAM" &&
+      keyToken.type !== "KEYWORD" &&
+      keyToken.type !== "TYPE"
+    ) {
+      throw new ParseError(
+        `Expected field key in json schema at token ${pos}, but got ${keyToken.type} ("${keyToken.value}")`
+      );
+    }
+    const key = keyToken.value;
+    pos++;
+
+    if (!tokens[pos] || tokens[pos]!.type !== "COLON") {
+      const got = tokens[pos] ? `${tokens[pos]!.type} ("${tokens[pos]!.value}")` : "end of input";
+      throw new ParseError(`Expected ":" after field "${key}" in json schema at token ${pos}, but got ${got}`);
+    }
+    pos++; // consume COLON
+
+    const fieldTypeResult = parseFieldValueType(tokens, pos);
+    fields.push({ key, type: fieldTypeResult.type });
+    pos = fieldTypeResult.nextPos;
+
+    if (!tokens[pos]) {
+      throw new ParseError(`Unclosed "{" in json schema: expected "," or "}" at token ${pos}, but got end of input`);
+    }
+
+    if (tokens[pos]!.type === "COMMA" || tokens[pos]!.value === ",") {
+      pos++; // consume comma
+      if (tokens[pos] && (tokens[pos]!.type === "RBRACE" || tokens[pos]!.value === "}")) {
+        pos++; // consume RBRACE
+        break;
+      }
+    } else if (tokens[pos]!.type === "RBRACE" || tokens[pos]!.value === "}") {
+      pos++; // consume RBRACE
+      break;
+    } else {
+      const got = `${tokens[pos]!.type} ("${tokens[pos]!.value}")`;
+      throw new ParseError(`Expected "," or "}" in json schema at token ${pos}, but got ${got}`);
+    }
+  }
+
+  const typeStr = `json{${fields.map((f) => `${f.key}:${f.type}`).join(",")}}`;
+  return { type: typeStr, nextPos: pos };
+}
+
 function parseTypeWithLimit(
   tokens: Token[],
   pos: number
@@ -60,8 +225,14 @@ function parseTypeWithLimit(
     throw new ParseError(`Unknown type "${tokens[pos]!.value}". Expected text, list or json.`);
   }
   expect(tokens, pos, "TYPE");
-  const typeName = tokens[pos]!.value;
+  let typeName = tokens[pos]!.value;
   pos++;
+
+  if (typeName === "json" && tokens[pos] && (tokens[pos]!.type === "LBRACE" || tokens[pos]!.value === "{")) {
+    const recordResult = parseJsonRecordType(tokens, pos);
+    typeName = recordResult.type;
+    pos = recordResult.nextPos;
+  }
 
   if (tokens[pos] && (tokens[pos]!.type === "LBRACKET" || tokens[pos]!.value === "[")) {
     if (typeName !== "text") {
@@ -191,4 +362,4 @@ export function parse(tokens: Token[]): Step[] {
   }
 
   return steps;
-}
+}

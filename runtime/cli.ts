@@ -12,7 +12,7 @@ export type DemoCase = "valid" | "broken" | "limit";
 
 const demoChains: Record<DemoCase, string> = {
   valid: "step summarize: in=text, out=text -> step format: in=text, out=list",
-  broken: "step format: in=text, out=list -> step email: in=text, out=text",
+  broken: "step format: in=text, out=json -> step email: in=text, out=text",
   limit: "step shorten: in=text, out=text[max 10]",
 };
 

@@ -123,4 +123,80 @@ describe("PromptLang parser", () => {
     expect(() => parse(tokenize(source))).toThrow(ParseError);
     expect(() => parse(tokenize(source))).toThrow(/greater than zero/i);
   });
+
+  it("parses parameterized JSON types with scalar value types", () => {
+    const source = "step process: in=json{title:text,tags:list}, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toEqual([
+      { name: "process", inType: "json{title:text,tags:list}", outType: "text" },
+    ]);
+  });
+
+  it("parses parameterized JSON types with internal whitespace", () => {
+    const source = "step process: in=json{ title: text , tags: list }, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toEqual([
+      { name: "process", inType: "json{title:text,tags:list}", outType: "text" },
+    ]);
+  });
+
+  it("parses nested parameterized JSON types", () => {
+    const source = "step process: in=json{meta:json{id:text,count:number},tags:list}, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toEqual([
+      { name: "process", inType: "json{meta:json{id:text,count:number},tags:list}", outType: "text" },
+    ]);
+  });
+
+  it("parses multiple chained steps with parameterized JSON types", () => {
+    const source =
+      "step A: in=text, out=json{title:text,tags:list} -> step B: in=json{title:text}, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toEqual([
+      { name: "A", inType: "text", outType: "json{title:text,tags:list}" },
+      { name: "B", inType: "json{title:text}", outType: "text" },
+    ]);
+  });
+
+  it("retains backward compatibility for plain unparameterized json", () => {
+    const source = "step A: in=json, out=json -> step B: in=json, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toEqual([
+      { name: "A", inType: "json", outType: "json" },
+      { name: "B", inType: "json", outType: "text" },
+    ]);
+  });
+
+  it("throws a ParseError when closing brace is missing in parameterized json", () => {
+    const source = "step process: in=json{title:text, out=text";
+
+    expect(() => parse(tokenize(source))).toThrow(ParseError);
+    expect(() => parse(tokenize(source))).toThrow(/closing "}"/i);
+  });
+
+  it("throws a ParseError for missing colon after field key in json schema", () => {
+    const source = "step process: in=json{title text}, out=text";
+
+    expect(() => parse(tokenize(source))).toThrow(ParseError);
+    expect(() => parse(tokenize(source))).toThrow(/Expected ":"/i);
+  });
+
+  it("throws a ParseError for unknown field type in json schema", () => {
+    const source = "step process: in=json{title:invalidType}, out=text";
+
+    expect(() => parse(tokenize(source))).toThrow(ParseError);
+    expect(() => parse(tokenize(source))).toThrow(/Unknown field type "invalidType"/i);
+  });
+
+  it("throws a ParseError when length limit is placed on parameterized json", () => {
+    const source = "step process: in=text, out=json{title:text}[max 100]";
+
+    expect(() => parse(tokenize(source))).toThrow(ParseError);
+    expect(() => parse(tokenize(source))).toThrow(/only allowed on "text"/i);
+  });
 });

@@ -1,4 +1,5 @@
 import type { Step } from "./parser";
+import { isParameterizedJson } from "./parser";
 
 export interface SemanticIssue {
   /** 0-based index of the offending step, or -1 for issues about the whole chain. */
@@ -9,7 +10,7 @@ export interface SemanticIssue {
 const KNOWN_TYPES = ["text", "list", "json"];
 
 function checkType(step: Step, index: number, type: string, issues: SemanticIssue[]): void {
-  if (!KNOWN_TYPES.includes(type)) {
+  if (!KNOWN_TYPES.includes(type) && !isParameterizedJson(type)) {
     issues.push({
       stepIndex: index,
       message: `step "${step.name}" uses unknown type "${type}" (expected text, list or json)`,

@@ -1,4 +1,3 @@
-
 import { describe, it, expect } from "vitest";
 import { checkTypes } from "../semantic/typeChecker";
 import type { Step } from "../parser/parser";
@@ -44,5 +43,47 @@ describe("PromptLang type checker", () => {
     ];
 
     expect(checkTypes(steps)).toEqual([]);
+  });
+
+  it("accepts valid width subtyping between steps", () => {
+    const steps: Step[] = [
+      { name: "fetch", inType: "text", outType: "json{title:text,tags:list,author:text}" },
+      { name: "process", inType: "json{title:text,tags:list}", outType: "text" },
+    ];
+
+    expect(checkTypes(steps)).toEqual([]);
+  });
+
+  it("reports an exact field-level mismatch error message", () => {
+    const steps: Step[] = [
+      { name: "A", inType: "text", outType: "json{title:text,tags:list}" },
+      { name: "B", inType: "json{title:text,tags:text}", outType: "text" },
+    ];
+
+    const issues = checkTypes(steps);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.message).toContain('Field "tags" type mismatch: expected "text", but got "list"');
+  });
+
+  it("reports a missing required field in typed json", () => {
+    const steps: Step[] = [
+      { name: "A", inType: "text", outType: "json{title:text}" },
+      { name: "B", inType: "json{title:text,tags:list}", outType: "text" },
+    ];
+
+    const issues = checkTypes(steps);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.message).toContain('Missing required field "tags"');
+  });
+
+  it("flags generic json into typed json as a type mismatch", () => {
+    const steps: Step[] = [
+      { name: "A", inType: "text", outType: "json" },
+      { name: "B", inType: "json{title:text}", outType: "text" },
+    ];
+
+    const issues = checkTypes(steps);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.message).toContain('Generic "json" cannot satisfy typed schema');
   });
 });
