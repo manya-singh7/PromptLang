@@ -736,6 +736,25 @@
   });
 
   // semantic/checkChain.ts
+  function addResult(results, res, fromName, toName) {
+    if (fromName) {
+      Object.defineProperty(res, "fromName", {
+        value: fromName,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      });
+    }
+    if (toName) {
+      Object.defineProperty(res, "toName", {
+        value: toName,
+        enumerable: false,
+        writable: true,
+        configurable: true
+      });
+    }
+    results.push(res);
+  }
   function checkChain(steps, options) {
     const results = [];
     if (steps.length === 0) return results;
@@ -770,22 +789,32 @@
               const depIndex = stepIndexMap.get(dep.name) ?? -1;
               const fieldKey = dep.name in schema ? dep.name : dep.name.toLowerCase() in schema ? dep.name.toLowerCase() : null;
               if (!fieldKey) {
-                results.push({
-                  fromIndex: depIndex,
-                  ok: false,
-                  message: `Fan-in contract mismatch: step "${step.name}" does not declare an input field for step "${dep.name}".`
-                });
+                addResult(
+                  results,
+                  {
+                    fromIndex: depIndex,
+                    ok: false,
+                    message: `Fan-in contract mismatch: step "${step.name}" does not declare an input field for step "${dep.name}".`
+                  },
+                  dep.name,
+                  step.name
+                );
               } else {
                 const expectedField = schema[fieldKey];
                 const sub = checkTypeSubtype(dep.outType, expectedField.rawType, options);
                 if (!sub.ok) {
-                  results.push({
-                    fromIndex: depIndex,
-                    ok: false,
-                    message: `Fan-in contract mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${expectedField.rawType}" for input "${fieldKey}". Field "${fieldKey}" type mismatch: expected "${expectedField.rawType}", but got "${dep.outType}".`
-                  });
+                  addResult(
+                    results,
+                    {
+                      fromIndex: depIndex,
+                      ok: false,
+                      message: `Fan-in contract mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${expectedField.rawType}" for input "${fieldKey}". Field "${fieldKey}" type mismatch: expected "${expectedField.rawType}", but got "${dep.outType}".`
+                    },
+                    dep.name,
+                    step.name
+                  );
                 } else {
-                  results.push({ fromIndex: depIndex, ok: true });
+                  addResult(results, { fromIndex: depIndex, ok: true }, dep.name, step.name);
                 }
               }
             }
@@ -794,31 +823,41 @@
                 (d) => d.name === requiredKey || d.name.toLowerCase() === requiredKey
               );
               if (!provided) {
-                results.push({
-                  fromIndex: targetIndex,
-                  ok: false,
-                  message: `Fan-in contract mismatch: step "${step.name}" requires input "${requiredKey}", but no matching incoming step was provided.`
-                });
+                addResult(
+                  results,
+                  {
+                    fromIndex: targetIndex,
+                    ok: false,
+                    message: `Fan-in contract mismatch: step "${step.name}" requires input "${requiredKey}", but no matching incoming step was provided.`
+                  },
+                  void 0,
+                  step.name
+                );
               }
             }
           }
         } else if (step.inType === "list" || step.inType === "json") {
           for (const dep of depSteps) {
             const depIndex = stepIndexMap.get(dep.name) ?? -1;
-            results.push({ fromIndex: depIndex, ok: true });
+            addResult(results, { fromIndex: depIndex, ok: true }, dep.name, step.name);
           }
         } else {
           for (const dep of depSteps) {
             const depIndex = stepIndexMap.get(dep.name) ?? -1;
             const sub = checkTypeSubtype(dep.outType, step.inType, options);
             if (!sub.ok) {
-              results.push({
-                fromIndex: depIndex,
-                ok: false,
-                message: `Fan-in type mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${step.inType}".`
-              });
+              addResult(
+                results,
+                {
+                  fromIndex: depIndex,
+                  ok: false,
+                  message: `Fan-in type mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${step.inType}".`
+                },
+                dep.name,
+                step.name
+              );
             } else {
-              results.push({ fromIndex: depIndex, ok: true });
+              addResult(results, { fromIndex: depIndex, ok: true }, dep.name, step.name);
             }
           }
         }
@@ -839,38 +878,58 @@
             detail = ` ${sub.reason}.`;
           }
           const prefix = isFanOut ? "Fan-out type mismatch: " : "Type mismatch: ";
-          results.push({
-            fromIndex,
-            ok: false,
-            message: `${prefix}step "${step.name}" outputs "${step.outType}", but step "${target.name}" expects "${target.inType}".${detail}`
-          });
-        } else {
-          if (step.outType !== "text" && (step.outMax !== void 0 || target.inMax !== void 0)) {
-            results.push({
+          addResult(
+            results,
+            {
               fromIndex,
               ok: false,
-              message: `Length limits are only allowed on text. Check steps "${step.name}" and "${target.name}".`
-            });
+              message: `${prefix}step "${step.name}" outputs "${step.outType}", but step "${target.name}" expects "${target.inType}".${detail}`
+            },
+            step.name,
+            target.name
+          );
+        } else {
+          if (step.outType !== "text" && (step.outMax !== void 0 || target.inMax !== void 0)) {
+            addResult(
+              results,
+              {
+                fromIndex,
+                ok: false,
+                message: `Length limits are only allowed on text. Check steps "${step.name}" and "${target.name}".`
+              },
+              step.name,
+              target.name
+            );
           } else if (step.outType === "text") {
             const outputLimit = step.outMax;
             const inputLimit = target.inMax;
             if (outputLimit === void 0 && inputLimit !== void 0) {
-              results.push({
-                fromIndex,
-                ok: false,
-                message: `Step "${step.name}" has unlimited text output, but step "${target.name}" accepts at most ${inputLimit} characters.`
-              });
+              addResult(
+                results,
+                {
+                  fromIndex,
+                  ok: false,
+                  message: `Step "${step.name}" has unlimited text output, but step "${target.name}" accepts at most ${inputLimit} characters.`
+                },
+                step.name,
+                target.name
+              );
             } else if (outputLimit !== void 0 && inputLimit !== void 0 && inputLimit < outputLimit) {
-              results.push({
-                fromIndex,
-                ok: false,
-                message: `Step "${step.name}" may output ${outputLimit} characters, but step "${target.name}" accepts only ${inputLimit}.`
-              });
+              addResult(
+                results,
+                {
+                  fromIndex,
+                  ok: false,
+                  message: `Step "${step.name}" may output ${outputLimit} characters, but step "${target.name}" accepts only ${inputLimit}.`
+                },
+                step.name,
+                target.name
+              );
             } else {
-              results.push({ fromIndex, ok: true });
+              addResult(results, { fromIndex, ok: true }, step.name, target.name);
             }
           } else {
-            results.push({ fromIndex, ok: true });
+            addResult(results, { fromIndex, ok: true }, step.name, target.name);
           }
         }
       }
@@ -881,12 +940,17 @@
     const fromType = current.outType;
     const toType = next.inType;
     if (fromType === "list" && toType === "text") {
-      results.push({
-        fromIndex: i,
-        ok: false,
-        message: `Step "${current.name}" outputs list, but step "${next.name}" expects text.`,
-        fix: "list-to-text"
-      });
+      addResult(
+        results,
+        {
+          fromIndex: i,
+          ok: false,
+          message: `Step "${current.name}" outputs list, but step "${next.name}" expects text.`,
+          fix: "list-to-text"
+        },
+        current.name,
+        next.name
+      );
       return;
     }
     const sub = checkTypeSubtype(fromType, toType, options);
@@ -895,42 +959,62 @@
       if (sub.reason && (isParameterizedJson(fromType) || isParameterizedJson(toType) || fromType === "json" && isParameterizedJson(toType))) {
         detail = ` ${sub.reason}.`;
       }
-      results.push({
-        fromIndex: i,
-        ok: false,
-        message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".${detail}`
-      });
+      addResult(
+        results,
+        {
+          fromIndex: i,
+          ok: false,
+          message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".${detail}`
+        },
+        current.name,
+        next.name
+      );
       return;
     }
     if (fromType !== "text" && (current.outMax !== void 0 || next.inMax !== void 0)) {
-      results.push({
-        fromIndex: i,
-        ok: false,
-        message: `Length limits are only allowed on text. Check steps "${current.name}" and "${next.name}".`
-      });
+      addResult(
+        results,
+        {
+          fromIndex: i,
+          ok: false,
+          message: `Length limits are only allowed on text. Check steps "${current.name}" and "${next.name}".`
+        },
+        current.name,
+        next.name
+      );
       return;
     }
     if (fromType === "text") {
       const outputLimit = current.outMax;
       const inputLimit = next.inMax;
       if (outputLimit === void 0 && inputLimit !== void 0) {
-        results.push({
-          fromIndex: i,
-          ok: false,
-          message: `Step "${current.name}" has unlimited text output, but step "${next.name}" accepts at most ${inputLimit} characters.`
-        });
+        addResult(
+          results,
+          {
+            fromIndex: i,
+            ok: false,
+            message: `Step "${current.name}" has unlimited text output, but step "${next.name}" accepts at most ${inputLimit} characters.`
+          },
+          current.name,
+          next.name
+        );
         return;
       }
       if (outputLimit !== void 0 && inputLimit !== void 0 && inputLimit < outputLimit) {
-        results.push({
-          fromIndex: i,
-          ok: false,
-          message: `Step "${current.name}" may output ${outputLimit} characters, but step "${next.name}" accepts only ${inputLimit}.`
-        });
+        addResult(
+          results,
+          {
+            fromIndex: i,
+            ok: false,
+            message: `Step "${current.name}" may output ${outputLimit} characters, but step "${next.name}" accepts only ${inputLimit}.`
+          },
+          current.name,
+          next.name
+        );
         return;
       }
     }
-    results.push({ fromIndex: i, ok: true });
+    addResult(results, { fromIndex: i, ok: true }, current.name, next.name);
   }
   var init_checkChain = __esm({
     "semantic/checkChain.ts"() {
@@ -948,16 +1032,128 @@
     }
   });
 
+  // runtime/estimate.ts
+  function estimateRun(steps, input, prices) {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let nextInputChars = input.length;
+    for (const step of steps) {
+      const instructionChars = step.name.length + step.inType.length + step.outType.length + 85;
+      inputTokens += Math.ceil((nextInputChars + instructionChars) / 4);
+      const outputChars = step.outType === "text" && step.outMax !== void 0 ? Math.min(prices.expectedOutputCharsPerStep, step.outMax) : prices.expectedOutputCharsPerStep;
+      outputTokens += Math.ceil(outputChars / 4);
+      nextInputChars = outputChars;
+    }
+    const costUsd = (inputTokens * prices.inputUsdPerMillion + outputTokens * prices.outputUsdPerMillion) / 1e6;
+    return {
+      inputTokens,
+      outputTokens,
+      costUsd,
+      timeLowSeconds: Math.max(1, steps.length * 2),
+      timeHighSeconds: Math.max(3, steps.length * 8),
+      note: "Rough estimate. Token use and network time can be different."
+    };
+  }
+  var init_estimate = __esm({
+    "runtime/estimate.ts"() {
+      "use strict";
+    }
+  });
+
   // web/app.ts
   var require_app = __commonJS({
     "web/app.ts"() {
       init_parser();
       init_semantic();
       init_check();
+      init_estimate();
+      var ILLUSTRATIVE_PRICES = {
+        inputUsdPerMillion: 0.25,
+        outputUsdPerMillion: 1.5,
+        expectedOutputCharsPerStep: 500
+      };
       function escapeHtml(text) {
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
+      }
+      function computeStages(steps) {
+        const stepMap = /* @__PURE__ */ new Map();
+        steps.forEach((s) => stepMap.set(s.name, s));
+        const levels = /* @__PURE__ */ new Map();
+        function getLevel(step, visited = /* @__PURE__ */ new Set()) {
+          if (levels.has(step.name)) return levels.get(step.name);
+          if (visited.has(step.name)) return 0;
+          visited.add(step.name);
+          const deps = step.inputsFrom || [];
+          if (deps.length === 0) {
+            levels.set(step.name, 0);
+            return 0;
+          }
+          let maxDepLevel = 0;
+          for (const depName of deps) {
+            const depStep = stepMap.get(depName);
+            if (depStep) {
+              maxDepLevel = Math.max(maxDepLevel, getLevel(depStep, visited) + 1);
+            }
+          }
+          levels.set(step.name, maxDepLevel);
+          return maxDepLevel;
+        }
+        for (const step of steps) {
+          getLevel(step);
+        }
+        const maxLevel = Math.max(0, ...Array.from(levels.values()));
+        const stages = [];
+        for (let l = 0; l <= maxLevel; l++) {
+          stages.push([]);
+        }
+        for (const step of steps) {
+          const l = levels.get(step.name) ?? 0;
+          stages[l].push(step);
+        }
+        return stages;
+      }
+      function findEdgeCheck(fromStep, toStep, fromIndex, checkResults) {
+        return checkResults.find((r) => {
+          if (r.fromName === fromStep.name && r.toName === toStep.name) {
+            return true;
+          }
+          if (r.fromIndex === fromIndex) {
+            if (!r.ok && r.message && r.message.includes(`"${toStep.name}"`)) {
+              return true;
+            }
+            if (r.ok && !r.toName) {
+              return true;
+            }
+          }
+          return false;
+        });
+      }
+      function createStepCardElement(step, stepNumber, isError, errorPortText) {
+        const stepCard = document.createElement("div");
+        stepCard.className = `step-card${isError ? " step-card-error" : ""}`;
+        const inLimitHtml = step.inMax !== void 0 ? `<span class="limit-badge">[max ${step.inMax}]</span>` : "";
+        const outLimitHtml = step.outMax !== void 0 ? `<span class="limit-badge">[max ${step.outMax}]</span>` : "";
+        const inErrorHtml = errorPortText ? `<div class="port-in-error">${escapeHtml(errorPortText)}</div>` : "";
+        stepCard.innerHTML = `
+    <div class="step-header">
+      <span class="step-tag">Step ${stepNumber}</span>
+      <div class="step-name">${escapeHtml(step.name)}</div>
+    </div>
+    <div class="step-ports">
+      <div class="port-row port-in">
+        <span class="port-label">in</span>
+        <span class="type-pill" title="${escapeHtml(step.inType)}">${escapeHtml(step.inType)}${inLimitHtml}</span>
+      </div>
+      ${inErrorHtml}
+      <div class="port-row port-out">
+        <span class="port-label">out</span>
+        <span class="type-pill" title="${escapeHtml(step.outType)}">${escapeHtml(step.outType)}${outLimitHtml}</span>
+      </div>
+    </div>
+  `;
+        return stepCard;
       }
       function initApp() {
         const sourceInput = document.getElementById("source-input");
@@ -967,11 +1163,14 @@
         const errorTitle = errorContainer?.querySelector(".error-title");
         const visualizationSection = document.getElementById("visualization-section");
         const chainSummary = document.getElementById("chain-summary");
+        const costEstimate = document.getElementById("cost-estimate");
         const chainFlow = document.getElementById("chain-flow");
         const chainStatus = document.getElementById("chain-status");
         const loadValidBtn = document.getElementById("load-valid-btn");
         const loadBrokenBtn = document.getElementById("load-broken-btn");
         const loadLimitsBtn = document.getElementById("load-limits-btn");
+        const loadDagBtn = document.getElementById("load-dag-btn");
+        const loadSchemaBtn = document.getElementById("load-schema-btn");
         if (!sourceInput || !checkBtn || !errorContainer || !errorMessage || !chainFlow) {
           console.error("Missing required DOM elements");
           return;
@@ -979,6 +1178,10 @@
         const VALID_EXAMPLE = "step summarize: in=text, out=text -> step translate: in=text, out=text -> step format: in=text, out=list";
         const BROKEN_EXAMPLE = "step summarize: in=text, out=text -> step format: in=text, out=list -> step email: in=text, out=text";
         const LIMITS_EXAMPLE = "step shorten: in=text, out=text[max 280] -> step translate: in=text[max 1000], out=text";
+        const DAG_EXAMPLE = "step start: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=text) -> step finish: in=text, out=text";
+        const SCHEMA_VALID_EXAMPLE = "step extract: in=text, out=json{title:text,tags:list,score:number} -> step render: in=json{title:text,tags:list}, out=text";
+        const SCHEMA_MISMATCH_EXAMPLE = "step extract: in=text, out=json{title:text,tags:list,score:number} -> step render: in=json{title:text,tags:text}, out=text";
+        let lastSchemaLoaded = "mismatch";
         function showErrorTitle(title) {
           if (errorTitle) errorTitle.innerHTML = `<span>\u274C</span> ${escapeHtml(title)}`;
         }
@@ -988,6 +1191,7 @@
             errorContainer.style.display = "none";
             if (visualizationSection) visualizationSection.style.display = "block";
             if (chainSummary) chainSummary.style.display = "none";
+            if (costEstimate) costEstimate.style.display = "none";
             chainFlow.style.display = "block";
             chainFlow.innerHTML = `
         <div class="empty-state">
@@ -1008,6 +1212,7 @@
             const issues = analyze(steps);
             if (issues.length > 0) {
               if (chainSummary) chainSummary.style.display = "none";
+              if (costEstimate) costEstimate.style.display = "none";
               showErrorTitle(issues.length === 1 ? "Semantic Error" : `${issues.length} Semantic Errors`);
               errorContainer.style.display = "block";
               errorMessage.innerHTML = issues.map((issue) => `<div>${escapeHtml(issue.message)}</div>`).join("");
@@ -1024,6 +1229,7 @@
             chainFlow.innerHTML = "";
             if (steps.length === 0) {
               if (chainSummary) chainSummary.style.display = "none";
+              if (costEstimate) costEstimate.style.display = "none";
               chainFlow.innerHTML = `
           <div class="empty-state">No steps found in input.</div>
         `;
@@ -1045,51 +1251,158 @@
           `;
               }
             }
-            steps.forEach((step, index) => {
-              const incomingCheck = index > 0 ? checkResults.find((r) => r.fromIndex === index - 1) : void 0;
-              const hasInputMismatch = Boolean(incomingCheck && !incomingCheck.ok);
-              const stepCard = document.createElement("div");
-              stepCard.className = `step-card${hasInputMismatch ? " step-card-error" : ""}`;
-              const inLimitHtml = step.inMax !== void 0 ? `<span class="limit-badge">[max ${step.inMax}]</span>` : "";
-              const outLimitHtml = step.outMax !== void 0 ? `<span class="limit-badge">[max ${step.outMax}]</span>` : "";
-              const prevStep = index > 0 ? steps[index - 1] : void 0;
-              const inErrorHtml = hasInputMismatch && prevStep ? `<div class="port-in-error">expects ${escapeHtml(step.inType)}, got ${escapeHtml(prevStep.outType)}</div>` : "";
-              stepCard.innerHTML = `
-          <div class="step-header">
-            <span class="step-tag">Step ${index + 1}</span>
-            <div class="step-name">${escapeHtml(step.name)}</div>
-          </div>
-          <div class="step-ports">
-            <div class="port-row port-in">
-              <span class="port-label">in</span>
-              <span class="type-pill">${escapeHtml(step.inType)}${inLimitHtml}</span>
-            </div>
-            ${inErrorHtml}
-            <div class="port-row port-out">
-              <span class="port-label">out</span>
-              <span class="type-pill">${escapeHtml(step.outType)}${outLimitHtml}</span>
-            </div>
-          </div>
+            if (costEstimate) {
+              const estimate = estimateRun(steps, "Sample prompt input", ILLUSTRATIVE_PRICES);
+              costEstimate.style.display = "flex";
+              costEstimate.innerHTML = `
+          <span class="cost-estimate-label">Estimated cost (illustrative):</span>
+          <span class="cost-estimate-value">about $${estimate.costUsd.toFixed(6)}</span>
+          <span class="cost-estimate-details">(${estimate.inputTokens} in / ${estimate.outputTokens} out tokens, ~${estimate.timeLowSeconds}\u2013${estimate.timeHighSeconds}s)</span>
+          <span class="cost-estimate-note">\u2014 rough estimate based on sample rates ($0.25/M in, $1.50/M out); no API call or charge</span>
         `;
-              chainFlow.appendChild(stepCard);
-              if (index < steps.length - 1) {
-                const check = checkResults.find((r) => r.fromIndex === index);
-                const isOk = check ? check.ok : true;
-                const connector = document.createElement("div");
-                connector.className = `chain-connector ${isOk ? "connector-ok" : "connector-error"}`;
-                const errorHtml = !isOk && check?.message ? `<div class="connector-error-message">${escapeHtml(check.message)}</div>` : "";
-                connector.innerHTML = `
-            <div class="arrow-line-container">
-              <svg class="arrow-svg" width="90" height="26" viewBox="0 0 90 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M4 13 H74" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-                <path d="M68 6 L84 13 L68 20 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-              </svg>
-            </div>
-            ${errorHtml}
-          `;
-                chainFlow.appendChild(connector);
-              }
-            });
+            }
+            const stepIndexMap = /* @__PURE__ */ new Map();
+            steps.forEach((s, idx) => stepIndexMap.set(s.name, idx));
+            const isDag = steps.some(
+              (s) => s.inputsFrom && s.inputsFrom.length > 1 || s.outputsTo && s.outputsTo.length > 1
+            );
+            if (!isDag) {
+              steps.forEach((step, index) => {
+                const incomingCheck = index > 0 ? checkResults.find((r) => r.fromIndex === index - 1) : void 0;
+                const hasInputMismatch = Boolean(incomingCheck && !incomingCheck.ok);
+                const prevStep = index > 0 ? steps[index - 1] : void 0;
+                const errorPortText = hasInputMismatch && prevStep ? `expects ${step.inType}, got ${prevStep.outType}` : void 0;
+                const stepCard = createStepCardElement(step, index + 1, hasInputMismatch, errorPortText);
+                chainFlow.appendChild(stepCard);
+                if (index < steps.length - 1) {
+                  const check = checkResults.find((r) => r.fromIndex === index);
+                  const isOk = check ? check.ok : true;
+                  const connector = document.createElement("div");
+                  connector.className = `chain-connector ${isOk ? "connector-ok" : "connector-error"}`;
+                  const errorHtml = !isOk && check?.message ? `<div class="connector-error-message">${escapeHtml(check.message)}</div>` : "";
+                  connector.innerHTML = `
+              <div class="arrow-line-container">
+                <svg class="arrow-svg" width="90" height="26" viewBox="0 0 90 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 13 H74" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                  <path d="M68 6 L84 13 L68 20 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                </svg>
+              </div>
+              ${errorHtml}
+            `;
+                  chainFlow.appendChild(connector);
+                }
+              });
+            } else {
+              const stages = computeStages(steps);
+              const dagContainer = document.createElement("div");
+              dagContainer.className = "dag-container";
+              stages.forEach((stageSteps, stageIdx) => {
+                const stageRow = document.createElement("div");
+                stageRow.className = "dag-stage-row";
+                stageSteps.forEach((step) => {
+                  const stepIndex = stepIndexMap.get(step.name) ?? 0;
+                  const deps = step.inputsFrom || [];
+                  let hasIncomingMismatch = false;
+                  let portErrorMsg = "";
+                  for (const depName of deps) {
+                    const depStep = steps.find((s) => s.name === depName);
+                    if (depStep) {
+                      const depIdx = stepIndexMap.get(depStep.name) ?? 0;
+                      const check = findEdgeCheck(depStep, step, depIdx, checkResults);
+                      if (check && !check.ok) {
+                        hasIncomingMismatch = true;
+                        portErrorMsg = `expects ${step.inType}, got ${depStep.outType}`;
+                        break;
+                      }
+                    }
+                  }
+                  const stepCard = createStepCardElement(
+                    step,
+                    stepIndex + 1,
+                    hasIncomingMismatch,
+                    portErrorMsg || void 0
+                  );
+                  stageRow.appendChild(stepCard);
+                });
+                dagContainer.appendChild(stageRow);
+                if (stageIdx < stages.length - 1) {
+                  const nextStageSteps = stages[stageIdx + 1];
+                  const connectorsRow = document.createElement("div");
+                  connectorsRow.className = "dag-connectors-row";
+                  if (stageSteps.length === 1 && nextStageSteps.length > 1) {
+                    const sourceStep = stageSteps[0];
+                    const sourceIdx = stepIndexMap.get(sourceStep.name) ?? 0;
+                    nextStageSteps.forEach((targetStep) => {
+                      const check = findEdgeCheck(sourceStep, targetStep, sourceIdx, checkResults);
+                      const isOk = check ? check.ok : true;
+                      const connector = document.createElement("div");
+                      connector.className = `dag-branch-connector ${isOk ? "connector-ok" : "connector-error"}`;
+                      const errorHtml = !isOk && check?.message ? `<div class="connector-error-message">${escapeHtml(check.message)}</div>` : "";
+                      connector.innerHTML = `
+                  <span class="dag-arrow-label">${escapeHtml(sourceStep.name)} \u2192 ${escapeHtml(targetStep.name)}</span>
+                  <div class="arrow-line-container">
+                    <svg class="arrow-svg arrow-vertical" width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M16 2 V28" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                      <path d="M9 22 L16 34 L23 22 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  ${errorHtml}
+                `;
+                      connectorsRow.appendChild(connector);
+                    });
+                  } else if (stageSteps.length > 1 && nextStageSteps.length === 1) {
+                    const targetStep = nextStageSteps[0];
+                    stageSteps.forEach((sourceStep) => {
+                      const sourceIdx = stepIndexMap.get(sourceStep.name) ?? 0;
+                      const check = findEdgeCheck(sourceStep, targetStep, sourceIdx, checkResults);
+                      const isOk = check ? check.ok : true;
+                      const connector = document.createElement("div");
+                      connector.className = `dag-branch-connector ${isOk ? "connector-ok" : "connector-error"}`;
+                      const errorHtml = !isOk && check?.message ? `<div class="connector-error-message">${escapeHtml(check.message)}</div>` : "";
+                      connector.innerHTML = `
+                  <span class="dag-arrow-label">${escapeHtml(sourceStep.name)} \u2192 ${escapeHtml(targetStep.name)}</span>
+                  <div class="arrow-line-container">
+                    <svg class="arrow-svg arrow-vertical" width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M16 2 V28" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                      <path d="M9 22 L16 34 L23 22 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  ${errorHtml}
+                `;
+                      connectorsRow.appendChild(connector);
+                    });
+                  } else {
+                    stageSteps.forEach((sourceStep) => {
+                      const sourceIdx = stepIndexMap.get(sourceStep.name) ?? 0;
+                      const targets = (sourceStep.outputsTo || []).filter(
+                        (tName) => nextStageSteps.some((ns) => ns.name === tName)
+                      );
+                      targets.forEach((targetName) => {
+                        const targetStep = nextStageSteps.find((ns) => ns.name === targetName);
+                        const check = findEdgeCheck(sourceStep, targetStep, sourceIdx, checkResults);
+                        const isOk = check ? check.ok : true;
+                        const connector = document.createElement("div");
+                        connector.className = `dag-branch-connector ${isOk ? "connector-ok" : "connector-error"}`;
+                        const errorHtml = !isOk && check?.message ? `<div class="connector-error-message">${escapeHtml(check.message)}</div>` : "";
+                        connector.innerHTML = `
+                    <span class="dag-arrow-label">${escapeHtml(sourceStep.name)} \u2192 ${escapeHtml(targetStep.name)}</span>
+                    <div class="arrow-line-container">
+                      <svg class="arrow-svg arrow-vertical" width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 2 V28" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                        <path d="M9 22 L16 34 L23 22 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                      </svg>
+                    </div>
+                    ${errorHtml}
+                  `;
+                        connectorsRow.appendChild(connector);
+                      });
+                    });
+                  }
+                  dagContainer.appendChild(connectorsRow);
+                }
+              });
+              chainFlow.appendChild(dagContainer);
+            }
             if (chainStatus) {
               chainStatus.style.display = "inline-flex";
               if (errorCount > 0) {
@@ -1097,11 +1410,12 @@
                 chainStatus.textContent = "Type Mismatch";
               } else {
                 chainStatus.className = "chain-status-badge status-ok";
-                chainStatus.textContent = `Valid Chain (${steps.length} steps)`;
+                chainStatus.textContent = isDag ? `Valid DAG (${steps.length} steps)` : `Valid Chain (${steps.length} steps)`;
               }
             }
           } catch (err) {
             if (chainSummary) chainSummary.style.display = "none";
+            if (costEstimate) costEstimate.style.display = "none";
             showErrorTitle("Parse Error");
             if (err instanceof ParseError) {
               errorContainer.style.display = "block";
@@ -1138,6 +1452,26 @@
         if (loadLimitsBtn) {
           loadLimitsBtn.addEventListener("click", () => {
             sourceInput.value = LIMITS_EXAMPLE;
+            render();
+          });
+        }
+        if (loadDagBtn) {
+          loadDagBtn.addEventListener("click", () => {
+            sourceInput.value = DAG_EXAMPLE;
+            render();
+          });
+        }
+        if (loadSchemaBtn) {
+          loadSchemaBtn.addEventListener("click", () => {
+            if (lastSchemaLoaded === "mismatch") {
+              sourceInput.value = SCHEMA_VALID_EXAMPLE;
+              lastSchemaLoaded = "valid";
+              loadSchemaBtn.title = "Loaded valid JSON schema. Click to load field mismatch.";
+            } else {
+              sourceInput.value = SCHEMA_MISMATCH_EXAMPLE;
+              lastSchemaLoaded = "mismatch";
+              loadSchemaBtn.title = "Loaded field mismatch JSON schema. Click to load valid schema.";
+            }
             render();
           });
         }

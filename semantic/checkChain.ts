@@ -7,6 +7,33 @@ export interface ChainCheckResult {
   ok: boolean;
   message?: string;
   fix?: string;
+  fromName?: string;
+  toName?: string;
+}
+
+function addResult(
+  results: ChainCheckResult[],
+  res: ChainCheckResult,
+  fromName?: string,
+  toName?: string
+): void {
+  if (fromName) {
+    Object.defineProperty(res, "fromName", {
+      value: fromName,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  }
+  if (toName) {
+    Object.defineProperty(res, "toName", {
+      value: toName,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  }
+  results.push(res);
 }
 
 /**
@@ -64,22 +91,32 @@ export function checkChain(steps: Step[], options?: SubtypeOptions): ChainCheckR
                 : null;
 
             if (!fieldKey) {
-              results.push({
-                fromIndex: depIndex,
-                ok: false,
-                message: `Fan-in contract mismatch: step "${step.name}" does not declare an input field for step "${dep.name}".`,
-              });
+              addResult(
+                results,
+                {
+                  fromIndex: depIndex,
+                  ok: false,
+                  message: `Fan-in contract mismatch: step "${step.name}" does not declare an input field for step "${dep.name}".`,
+                },
+                dep.name,
+                step.name
+              );
             } else {
               const expectedField = schema[fieldKey]!;
               const sub = checkTypeSubtype(dep.outType, expectedField.rawType, options);
               if (!sub.ok) {
-                results.push({
-                  fromIndex: depIndex,
-                  ok: false,
-                  message: `Fan-in contract mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${expectedField.rawType}" for input "${fieldKey}". Field "${fieldKey}" type mismatch: expected "${expectedField.rawType}", but got "${dep.outType}".`,
-                });
+                addResult(
+                  results,
+                  {
+                    fromIndex: depIndex,
+                    ok: false,
+                    message: `Fan-in contract mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${expectedField.rawType}" for input "${fieldKey}". Field "${fieldKey}" type mismatch: expected "${expectedField.rawType}", but got "${dep.outType}".`,
+                  },
+                  dep.name,
+                  step.name
+                );
               } else {
-                results.push({ fromIndex: depIndex, ok: true });
+                addResult(results, { fromIndex: depIndex, ok: true }, dep.name, step.name);
               }
             }
           }
@@ -89,31 +126,41 @@ export function checkChain(steps: Step[], options?: SubtypeOptions): ChainCheckR
               (d) => d.name === requiredKey || d.name.toLowerCase() === requiredKey
             );
             if (!provided) {
-              results.push({
-                fromIndex: targetIndex,
-                ok: false,
-                message: `Fan-in contract mismatch: step "${step.name}" requires input "${requiredKey}", but no matching incoming step was provided.`,
-              });
+              addResult(
+                results,
+                {
+                  fromIndex: targetIndex,
+                  ok: false,
+                  message: `Fan-in contract mismatch: step "${step.name}" requires input "${requiredKey}", but no matching incoming step was provided.`,
+                },
+                undefined,
+                step.name
+              );
             }
           }
         }
       } else if (step.inType === "list" || step.inType === "json") {
         for (const dep of depSteps) {
           const depIndex = stepIndexMap.get(dep.name) ?? -1;
-          results.push({ fromIndex: depIndex, ok: true });
+          addResult(results, { fromIndex: depIndex, ok: true }, dep.name, step.name);
         }
       } else {
         for (const dep of depSteps) {
           const depIndex = stepIndexMap.get(dep.name) ?? -1;
           const sub = checkTypeSubtype(dep.outType, step.inType, options);
           if (!sub.ok) {
-            results.push({
-              fromIndex: depIndex,
-              ok: false,
-              message: `Fan-in type mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${step.inType}".`,
-            });
+            addResult(
+              results,
+              {
+                fromIndex: depIndex,
+                ok: false,
+                message: `Fan-in type mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${step.inType}".`,
+              },
+              dep.name,
+              step.name
+            );
           } else {
-            results.push({ fromIndex: depIndex, ok: true });
+            addResult(results, { fromIndex: depIndex, ok: true }, dep.name, step.name);
           }
         }
       }
@@ -144,45 +191,65 @@ export function checkChain(steps: Step[], options?: SubtypeOptions): ChainCheckR
           detail = ` ${sub.reason}.`;
         }
         const prefix = isFanOut ? "Fan-out type mismatch: " : "Type mismatch: ";
-        results.push({
-          fromIndex,
-          ok: false,
-          message: `${prefix}step "${step.name}" outputs "${step.outType}", but step "${target.name}" expects "${target.inType}".${detail}`,
-        });
+        addResult(
+          results,
+          {
+            fromIndex,
+            ok: false,
+            message: `${prefix}step "${step.name}" outputs "${step.outType}", but step "${target.name}" expects "${target.inType}".${detail}`,
+          },
+          step.name,
+          target.name
+        );
       } else {
         if (
           step.outType !== "text" &&
           (step.outMax !== undefined || target.inMax !== undefined)
         ) {
-          results.push({
-            fromIndex,
-            ok: false,
-            message: `Length limits are only allowed on text. Check steps "${step.name}" and "${target.name}".`,
-          });
+          addResult(
+            results,
+            {
+              fromIndex,
+              ok: false,
+              message: `Length limits are only allowed on text. Check steps "${step.name}" and "${target.name}".`,
+            },
+            step.name,
+            target.name
+          );
         } else if (step.outType === "text") {
           const outputLimit = step.outMax;
           const inputLimit = target.inMax;
           if (outputLimit === undefined && inputLimit !== undefined) {
-            results.push({
-              fromIndex,
-              ok: false,
-              message: `Step "${step.name}" has unlimited text output, but step "${target.name}" accepts at most ${inputLimit} characters.`,
-            });
+            addResult(
+              results,
+              {
+                fromIndex,
+                ok: false,
+                message: `Step "${step.name}" has unlimited text output, but step "${target.name}" accepts at most ${inputLimit} characters.`,
+              },
+              step.name,
+              target.name
+            );
           } else if (
             outputLimit !== undefined &&
             inputLimit !== undefined &&
             inputLimit < outputLimit
           ) {
-            results.push({
-              fromIndex,
-              ok: false,
-              message: `Step "${step.name}" may output ${outputLimit} characters, but step "${target.name}" accepts only ${inputLimit}.`,
-            });
+            addResult(
+              results,
+              {
+                fromIndex,
+                ok: false,
+                message: `Step "${step.name}" may output ${outputLimit} characters, but step "${target.name}" accepts only ${inputLimit}.`,
+              },
+              step.name,
+              target.name
+            );
           } else {
-            results.push({ fromIndex, ok: true });
+            addResult(results, { fromIndex, ok: true }, step.name, target.name);
           }
         } else {
-          results.push({ fromIndex, ok: true });
+          addResult(results, { fromIndex, ok: true }, step.name, target.name);
         }
       }
     }
@@ -203,12 +270,17 @@ function checkPair(
 
   // Special case: list -> text is recoverable using a conversion fix.
   if (fromType === "list" && toType === "text") {
-    results.push({
-      fromIndex: i,
-      ok: false,
-      message: `Step "${current.name}" outputs list, but step "${next.name}" expects text.`,
-      fix: "list-to-text",
-    });
+    addResult(
+      results,
+      {
+        fromIndex: i,
+        ok: false,
+        message: `Step "${current.name}" outputs list, but step "${next.name}" expects text.`,
+        fix: "list-to-text",
+      },
+      current.name,
+      next.name
+    );
     return;
   }
 
@@ -223,11 +295,16 @@ function checkPair(
     ) {
       detail = ` ${sub.reason}.`;
     }
-    results.push({
-      fromIndex: i,
-      ok: false,
-      message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".${detail}`,
-    });
+    addResult(
+      results,
+      {
+        fromIndex: i,
+        ok: false,
+        message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".${detail}`,
+      },
+      current.name,
+      next.name
+    );
     return;
   }
 
@@ -236,11 +313,16 @@ function checkPair(
     fromType !== "text" &&
     (current.outMax !== undefined || next.inMax !== undefined)
   ) {
-    results.push({
-      fromIndex: i,
-      ok: false,
-      message: `Length limits are only allowed on text. Check steps "${current.name}" and "${next.name}".`,
-    });
+    addResult(
+      results,
+      {
+        fromIndex: i,
+        ok: false,
+        message: `Length limits are only allowed on text. Check steps "${current.name}" and "${next.name}".`,
+      },
+      current.name,
+      next.name
+    );
     return;
   }
 
@@ -250,11 +332,16 @@ function checkPair(
     const inputLimit = next.inMax;
 
     if (outputLimit === undefined && inputLimit !== undefined) {
-      results.push({
-        fromIndex: i,
-        ok: false,
-        message: `Step "${current.name}" has unlimited text output, but step "${next.name}" accepts at most ${inputLimit} characters.`,
-      });
+      addResult(
+        results,
+        {
+          fromIndex: i,
+          ok: false,
+          message: `Step "${current.name}" has unlimited text output, but step "${next.name}" accepts at most ${inputLimit} characters.`,
+        },
+        current.name,
+        next.name
+      );
       return;
     }
 
@@ -263,14 +350,19 @@ function checkPair(
       inputLimit !== undefined &&
       inputLimit < outputLimit
     ) {
-      results.push({
-        fromIndex: i,
-        ok: false,
-        message: `Step "${current.name}" may output ${outputLimit} characters, but step "${next.name}" accepts only ${inputLimit}.`,
-      });
+      addResult(
+        results,
+        {
+          fromIndex: i,
+          ok: false,
+          message: `Step "${current.name}" may output ${outputLimit} characters, but step "${next.name}" accepts only ${inputLimit}.`,
+        },
+        current.name,
+        next.name
+      );
       return;
     }
   }
 
-  results.push({ fromIndex: i, ok: true });
+  addResult(results, { fromIndex: i, ok: true }, current.name, next.name);
 }

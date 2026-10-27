@@ -177,7 +177,7 @@ tests/                Vitest test suites (125 tests across 10 test files)
 | Cost & time estimate | Done | Calculates input/output token counts, dollar cost, and latency estimates before execution |
 | Empirical benchmark suite | Done | `npm run benchmark` measures prevented calls, token waste, and dollar savings across model presets |
 | Automatic safe fixes | Done | Safe insertion of `list-to-text` adapter steps |
-| Web chain diagram | Done | Visual DAG rendering, color-coded contract compatibility, interactive error reporting |
+| Web chain diagram | Done | Draws linear steps or side-by-side branch stages with green/red arrows, error messages, and an illustrative cost estimate |
 | 40 seeded test chains with validator | Done | `npm run validate:seeded` (30 broken, 10 valid) |
 | Automated test suite | Done | 125 tests across 10 test files with Vitest |
 | CI | Done | GitHub Actions runs tests on every push and pull request |

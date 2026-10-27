@@ -40,6 +40,12 @@
             <button id="load-limits-btn" class="btn-secondary" type="button" title="Load chain with max length limits">
               Limits Example
             </button>
+            <button id="load-dag-btn" class="btn-secondary" type="button" title="Load fan-out and fan-in DAG chain">
+              DAG Example
+            </button>
+            <button id="load-schema-btn" class="btn-secondary" type="button" title="Load JSON Schema-aware typing example">
+              JSON Schema Example
+            </button>
           </div>
         </div>
       </section>
@@ -59,6 +65,7 @@
           <span id="chain-status" class="chain-status-badge status-ok">Ready</span>
         </div>
         <div id="chain-summary" class="chain-summary-line" style="display: none;"></div>
+        <div id="cost-estimate" class="cost-estimate-line" style="display: none;"></div>
         <div id="chain-flow" class="chain-flow">
           <!-- Dynamically populated step cards and arrows -->
         </div>
