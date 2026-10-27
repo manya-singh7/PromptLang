@@ -9,6 +9,14 @@ export interface Step {
   outType: string;
   inMax?: number;
   outMax?: number;
+  inputsFrom?: string[];
+  outputsTo?: string[];
+}
+
+export interface StepGraph {
+  steps: Step[];
+  dependencies: Map<string, string[]>;
+  dependents: Map<string, string[]>;
 }
 
 export interface JsonFieldDef {
@@ -73,6 +81,9 @@ export function tokenize(source: string): Token[] {
     .replace(/\]/g, " ] ")
     .replace(/\{/g, " { ")
     .replace(/\}/g, " } ")
+    .replace(/\(/g, " ( ")
+    .replace(/\)/g, " ) ")
+    .replace(/;/g, " ; ")
     .split(/\s+/)
     .filter((w) => w.length > 0);
 
@@ -89,8 +100,11 @@ export function tokenize(source: string): Token[] {
     else if (word === "]") tokens.push({ type: "RBRACKET", value: word });
     else if (word === "{") tokens.push({ type: "LBRACE", value: word });
     else if (word === "}") tokens.push({ type: "RBRACE", value: word });
+    else if (word === "(") tokens.push({ type: "LPAREN", value: word });
+    else if (word === ")") tokens.push({ type: "RPAREN", value: word });
+    else if (word === ";") tokens.push({ type: "SEMICOLON", value: word });
     else if (types.includes(word)) tokens.push({ type: "TYPE", value: word });
-    else if (word === "in" || word === "out") tokens.push({ type: "PARAM", value: word });
+    else if (word === "in" || word === "out" || word === "from") tokens.push({ type: "PARAM", value: word });
     else if (/^-?\d+$/.test(word)) tokens.push({ type: "NUMBER", value: word });
     else tokens.push({ type: "IDENTIFIER", value: word });
   }
@@ -293,73 +307,295 @@ function parseTypeWithLimit(
   return { type: typeName, nextPos: pos };
 }
 
-export function parse(tokens: Token[]): Step[] {
-  const steps: Step[] = [];
-  let pos = 0;
+function createStep(
+  name: string,
+  inType = "",
+  outType = "",
+  inMax?: number,
+  outMax?: number
+): Step {
+  const step: Step = { name, inType, outType };
+  if (inMax !== undefined) step.inMax = inMax;
+  if (outMax !== undefined) step.outMax = outMax;
+  const inputsFrom: string[] = [];
+  const outputsTo: string[] = [];
+  Object.defineProperty(step, "inputsFrom", {
+    value: inputsFrom,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(step, "outputsTo", {
+    value: outputsTo,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+  return step;
+}
 
-  while (pos < tokens.length) {
-    expect(tokens, pos, "KEYWORD");
-    if (tokens[pos]!.value !== "step") {
-      throw new ParseError(`Expected "step" but got "${tokens[pos]!.value}" at token ${pos}`);
-    }
-    pos++;
+function parseSingleStep(
+  tokens: Token[],
+  pos: number,
+  allowBareIdentifier: boolean,
+  stepMap: Map<string, Step>,
+  steps: Step[]
+): { name: string; nextPos: number } {
+  if (!tokens[pos]) {
+    throw new ParseError(`Expected step at token ${pos}, but got end of input`);
+  }
 
+  if (tokens[pos]!.type === "KEYWORD" && tokens[pos]!.value === "step") {
+    pos++; // consume "step"
     expect(tokens, pos, "IDENTIFIER");
     const name = tokens[pos]!.value;
     pos++;
 
-    expect(tokens, pos, "COLON");
-    pos++;
+    if (tokens[pos] && tokens[pos]!.type === "COLON") {
+      pos++; // consume COLON
 
-    expect(tokens, pos, "PARAM");
-    if (tokens[pos]!.value !== "in") {
-      throw new ParseError(`Expected "in" but got "${tokens[pos]!.value}" at token ${pos}`);
-    }
-    pos++;
-
-    expect(tokens, pos, "EQUALS");
-    pos++;
-
-    const inParsed = parseTypeWithLimit(tokens, pos);
-    const inType = inParsed.type;
-    const inMax = inParsed.max;
-    pos = inParsed.nextPos;
-
-    expect(tokens, pos, "COMMA");
-    pos++;
-
-    expect(tokens, pos, "PARAM");
-    if (tokens[pos]!.value !== "out") {
-      throw new ParseError(`Expected "out" but got "${tokens[pos]!.value}" at token ${pos}`);
-    }
-    pos++;
-
-    expect(tokens, pos, "EQUALS");
-    pos++;
-
-    const outParsed = parseTypeWithLimit(tokens, pos);
-    const outType = outParsed.type;
-    const outMax = outParsed.max;
-    pos = outParsed.nextPos;
-
-    const step: Step = { name, inType, outType };
-    if (inMax !== undefined) {
-      step.inMax = inMax;
-    }
-    if (outMax !== undefined) {
-      step.outMax = outMax;
-    }
-    steps.push(step);
-
-    if (tokens[pos] && tokens[pos]!.type === "ARROW") {
-      pos++;
-      if (pos >= tokens.length) {
-        throw new ParseError(`Unexpected end of input after "->" at token ${pos} — a step was expected after the arrow`);
+      expect(tokens, pos, "PARAM");
+      if (tokens[pos]!.value !== "in") {
+        throw new ParseError(`Expected "in" but got "${tokens[pos]!.value}" at token ${pos}`);
       }
-    } else if (pos < tokens.length) {
+      pos++;
+
+      expect(tokens, pos, "EQUALS");
+      pos++;
+
+      const inParsed = parseTypeWithLimit(tokens, pos);
+      const inType = inParsed.type;
+      const inMax = inParsed.max;
+      pos = inParsed.nextPos;
+
+      expect(tokens, pos, "COMMA");
+      pos++;
+
+      expect(tokens, pos, "PARAM");
+      if (tokens[pos]!.value !== "out") {
+        throw new ParseError(`Expected "out" but got "${tokens[pos]!.value}" at token ${pos}`);
+      }
+      pos++;
+
+      expect(tokens, pos, "EQUALS");
+      pos++;
+
+      const outParsed = parseTypeWithLimit(tokens, pos);
+      const outType = outParsed.type;
+      const outMax = outParsed.max;
+      pos = outParsed.nextPos;
+
+      const explicitFrom: string[] = [];
+      if (tokens[pos] && tokens[pos]!.type === "COMMA" && tokens[pos + 1]?.value === "from") {
+        pos += 2; // consume "," and "from"
+        expect(tokens, pos, "EQUALS");
+        pos++;
+        if (tokens[pos] && tokens[pos]!.type === "LPAREN") {
+          pos++; // consume "("
+          while (pos < tokens.length && tokens[pos]!.type !== "RPAREN") {
+            if (tokens[pos]!.type === "KEYWORD" && tokens[pos]!.value === "step") pos++;
+            expect(tokens, pos, "IDENTIFIER");
+            explicitFrom.push(tokens[pos]!.value);
+            pos++;
+            if (tokens[pos] && tokens[pos]!.type === "COMMA") pos++;
+          }
+          expect(tokens, pos, "RPAREN");
+          pos++;
+        } else {
+          while (
+            pos < tokens.length &&
+            (tokens[pos]!.type === "IDENTIFIER" ||
+              (tokens[pos]!.type === "KEYWORD" && tokens[pos]!.value === "step"))
+          ) {
+            if (tokens[pos]!.type === "KEYWORD" && tokens[pos]!.value === "step") pos++;
+            explicitFrom.push(tokens[pos]!.value);
+            pos++;
+            if (tokens[pos] && tokens[pos]!.type === "COMMA" && tokens[pos + 1]?.type === "IDENTIFIER") {
+              pos++;
+            } else {
+              break;
+            }
+          }
+        }
+      }
+
+      const step = createStep(name, inType, outType, inMax, outMax);
+      steps.push(step);
+      stepMap.set(name, step);
+
+      if (explicitFrom.length > 0) {
+        for (const fromName of explicitFrom) {
+          if (!step.inputsFrom!.includes(fromName)) step.inputsFrom!.push(fromName);
+          let fromStep = stepMap.get(fromName);
+          if (!fromStep) {
+            fromStep = createStep(fromName);
+            stepMap.set(fromName, fromStep);
+            steps.push(fromStep);
+          }
+          if (!fromStep.outputsTo!.includes(name)) fromStep.outputsTo!.push(name);
+        }
+      }
+
+      return { name, nextPos: pos };
+    } else {
+      if (tokens[pos] && tokens[pos]!.type === "PARAM" && tokens[pos]!.value === "in") {
+        throw new ParseError(
+          `Expected COLON at token ${pos}, but got ${tokens[pos]!.type} ("${tokens[pos]!.value}")`
+        );
+      }
+      let step = stepMap.get(name);
+      if (!step) {
+        step = createStep(name);
+        stepMap.set(name, step);
+        steps.push(step);
+      }
+      return { name, nextPos: pos };
+    }
+  } else {
+    if (!allowBareIdentifier) {
+      expect(tokens, pos, "KEYWORD");
+      if (tokens[pos]!.value !== "step") {
+        throw new ParseError(`Expected "step" but got "${tokens[pos]!.value}" at token ${pos}`);
+      }
+    }
+    expect(tokens, pos, "IDENTIFIER");
+    const name = tokens[pos]!.value;
+    pos++;
+
+    if (tokens[pos] && tokens[pos]!.type === "COLON") {
+      pos++; // consume COLON
+      expect(tokens, pos, "PARAM");
+      if (tokens[pos]!.value !== "in") {
+        throw new ParseError(`Expected "in" but got "${tokens[pos]!.value}" at token ${pos}`);
+      }
+      pos++;
+      expect(tokens, pos, "EQUALS");
+      pos++;
+      const inParsed = parseTypeWithLimit(tokens, pos);
+      const inType = inParsed.type;
+      const inMax = inParsed.max;
+      pos = inParsed.nextPos;
+
+      expect(tokens, pos, "COMMA");
+      pos++;
+
+      expect(tokens, pos, "PARAM");
+      if (tokens[pos]!.value !== "out") {
+        throw new ParseError(`Expected "out" but got "${tokens[pos]!.value}" at token ${pos}`);
+      }
+      pos++;
+      expect(tokens, pos, "EQUALS");
+      pos++;
+      const outParsed = parseTypeWithLimit(tokens, pos);
+      const outType = outParsed.type;
+      const outMax = outParsed.max;
+      pos = outParsed.nextPos;
+
+      const step = createStep(name, inType, outType, inMax, outMax);
+      steps.push(step);
+      stepMap.set(name, step);
+      return { name, nextPos: pos };
+    } else {
+      let step = stepMap.get(name);
+      if (!step) {
+        step = createStep(name);
+        stepMap.set(name, step);
+        steps.push(step);
+      }
+      return { name, nextPos: pos };
+    }
+  }
+}
+
+function parseGroup(
+  tokens: Token[],
+  pos: number,
+  stepMap: Map<string, Step>,
+  steps: Step[]
+): { names: string[]; nextPos: number } {
+  if (tokens[pos] && tokens[pos]!.type === "LPAREN") {
+    pos++; // consume "("
+    const names: string[] = [];
+    while (pos < tokens.length && tokens[pos]!.type !== "RPAREN") {
+      const parsed = parseSingleStep(tokens, pos, true, stepMap, steps);
+      names.push(parsed.name);
+      pos = parsed.nextPos;
+      if (tokens[pos] && tokens[pos]!.type === "COMMA") {
+        pos++; // consume ","
+      } else if (tokens[pos] && tokens[pos]!.type === "RPAREN") {
+        break;
+      } else {
+        const got = tokens[pos] ? `${tokens[pos]!.type} ("${tokens[pos]!.value}")` : "end of input";
+        throw new ParseError(`Expected "," or ")" in step group at token ${pos}, but got ${got}`);
+      }
+    }
+    if (!tokens[pos] || tokens[pos]!.type !== "RPAREN") {
+      throw new ParseError(`Missing closing ")" for step group at token ${pos}`);
+    }
+    pos++; // consume ")"
+    return { names, nextPos: pos };
+  } else {
+    const parsed = parseSingleStep(tokens, pos, false, stepMap, steps);
+    return { names: [parsed.name], nextPos: parsed.nextPos };
+  }
+}
+
+export function parse(tokens: Token[]): Step[] {
+  const steps: Step[] = [];
+  const stepMap = new Map<string, Step>();
+  let pos = 0;
+
+  while (pos < tokens.length) {
+    if (tokens[pos]!.type === "SEMICOLON") {
+      pos++;
+      continue;
+    }
+
+    let currentGroup = parseGroup(tokens, pos, stepMap, steps);
+    pos = currentGroup.nextPos;
+
+    while (pos < tokens.length && tokens[pos]!.type === "ARROW") {
+      pos++; // consume "->"
+      if (pos >= tokens.length) {
+        throw new ParseError(
+          `Unexpected end of input after "->" at token ${pos} — a step was expected after the arrow`
+        );
+      }
+
+      const nextGroup = parseGroup(tokens, pos, stepMap, steps);
+      pos = nextGroup.nextPos;
+
+      for (const sourceName of currentGroup.names) {
+        const sourceStep = stepMap.get(sourceName);
+        for (const targetName of nextGroup.names) {
+          const targetStep = stepMap.get(targetName);
+          if (sourceStep && !sourceStep.outputsTo!.includes(targetName)) {
+            sourceStep.outputsTo!.push(targetName);
+          }
+          if (targetStep && !targetStep.inputsFrom!.includes(sourceName)) {
+            targetStep.inputsFrom!.push(sourceName);
+          }
+        }
+      }
+
+      currentGroup = nextGroup;
+    }
+
+    if (pos < tokens.length && tokens[pos]!.type !== "SEMICOLON") {
       throw new ParseError(`Expected -> or end of input at token ${pos}`);
     }
   }
+
+  Object.defineProperty(steps, "graph", {
+    value: {
+      steps,
+      dependencies: new Map(steps.map((s) => [s.name, s.inputsFrom || []])),
+      dependents: new Map(steps.map((s) => [s.name, s.outputsTo || []])),
+    },
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
 
   return steps;
 }

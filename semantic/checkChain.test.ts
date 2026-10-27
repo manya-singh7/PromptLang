@@ -215,4 +215,80 @@ describe("checkChain", () => {
       validResults.filter((result) => !result.hasError)
     ).toHaveLength(10);
   }, 15000);
+
+  describe("DAG checking (fan-out and fan-in joins)", () => {
+    it("passes for valid fan-out when source satisfies all branch input types", () => {
+      const source = "step source: in=text, out=text -> (step branch1: in=text, out=text, step branch2: in=text, out=list)";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.every((r) => r.ok)).toBe(true);
+    });
+
+    it("flags error when fan-out source is incompatible with one branch", () => {
+      const source = "step source: in=text, out=text -> (step branch1: in=text, out=text, step branch2: in=list, out=text)";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      const branch2Result = results.find((r) => !r.ok);
+      expect(branch2Result).toBeDefined();
+      expect(branch2Result?.message).toContain("Fan-out type mismatch");
+      expect(branch2Result?.message).toContain('step "source" outputs "text"');
+      expect(branch2Result?.message).toContain('step "branch2" expects "list"');
+    });
+
+    it("passes fan-out with structured json satisfying branch subschemas", () => {
+      const source = "step source: in=text, out=json{id:text,tags:list,score:number} -> (step branch1: in=json{id:text}, out=text, step branch2: in=json{tags:list}, out=text)";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      expect(results.every((r) => r.ok)).toBe(true);
+    });
+
+    it("passes valid fan-in join where target expects structured dictionary of inputs", () => {
+      const source = "step src: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=list) -> step merge: in=json{branchA:text,branchB:list}, out=text";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      expect(results.every((r) => r.ok)).toBe(true);
+    });
+
+    it("flags fan-in join when a branch type mismatches target dictionary field type", () => {
+      const source = "step src: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=list) -> step merge: in=json{branchA:text,branchB:text}, out=text";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      const failure = results.find((r) => !r.ok);
+      expect(failure).toBeDefined();
+      expect(failure?.message).toContain('Field "branchB" type mismatch: expected "text", but got "list"');
+    });
+
+    it("flags fan-in join when target dictionary requires a field not provided by incoming branches", () => {
+      const source = "step src: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=list) -> step merge: in=json{branchA:text,branchB:list,branchC:text}, out=text";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      const failure = results.find((r) => !r.ok && r.message?.includes("requires input"));
+      expect(failure).toBeDefined();
+      expect(failure?.message).toContain('step "merge" requires input "branchC"');
+    });
+
+    it("passes fan-in join when target expects list of inputs", () => {
+      const source = "step src: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=text) -> step merge: in=list, out=text";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      expect(results.every((r) => r.ok)).toBe(true);
+    });
+
+    it("passes fan-in join when target expects text (concatenation) and all branches output text", () => {
+      const source = "step src: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=text) -> step merge: in=text, out=text";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      expect(results.every((r) => r.ok)).toBe(true);
+    });
+
+    it("flags fan-in join when target expects text but a branch outputs list", () => {
+      const source = "step src: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=list) -> step merge: in=text, out=text";
+      const steps = parse(tokenize(source));
+      const results = checkChain(steps);
+      const failure = results.find((r) => !r.ok);
+      expect(failure).toBeDefined();
+      expect(failure?.message).toContain('Fan-in type mismatch: step "branchB" outputs "list", but step "merge" expects "text"');
+    });
+  });
 });

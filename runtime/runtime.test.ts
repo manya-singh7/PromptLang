@@ -261,6 +261,103 @@ describe("runtime integration", () => {
     expect(limit.status).toBe("runtime-limit");
     expect(limit.calls).toBe(1);
   });
+
+  describe("DAG runtime execution", () => {
+    it("executes independent fan-out steps in parallel via Promise.all", async () => {
+      const source = "step start: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=text) -> step merge: in=text, out=text";
+      const steps = parseChainSource(source);
+
+      let activeCount = 0;
+      let maxConcurrency = 0;
+      const executedOrder: string[] = [];
+
+      const callModel = async (step: PromptStep, _input: unknown) => {
+        activeCount++;
+        maxConcurrency = Math.max(maxConcurrency, activeCount);
+        executedOrder.push(step.name);
+        if (step.name === "branchA" || step.name === "branchB") {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        activeCount--;
+        return `result-${step.name}`;
+      };
+
+      const result = await runSteps(steps, "initial data", callModel);
+      expect(result).toBe("result-merge");
+      expect(maxConcurrency).toBeGreaterThanOrEqual(2);
+      expect(executedOrder[0]).toBe("start");
+      expect(executedOrder.slice(1, 3)).toEqual(expect.arrayContaining(["branchA", "branchB"]));
+      expect(executedOrder[3]).toBe("merge");
+    });
+
+    it("routes fan-in joined inputs into structured dictionaries matching schema", async () => {
+      const source = "step source: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=list) -> step merge: in=json{branchA:text,branchB:list}, out=text";
+      const steps = parseChainSource(source);
+
+      let mergeReceivedInput: unknown = null;
+
+      const callModel = async (step: PromptStep, input: unknown) => {
+        if (step.name === "source") return "raw-source";
+        if (step.name === "branchA") return "result from branch A";
+        if (step.name === "branchB") return JSON.stringify(["item 1", "item 2"]);
+        if (step.name === "merge") {
+          mergeReceivedInput = input;
+          return "successful merge";
+        }
+        return "";
+      };
+
+      const result = await runSteps(steps, "start", callModel);
+      expect(result).toBe("successful merge");
+      expect(mergeReceivedInput).toEqual(
+        expect.objectContaining({
+          branchA: "result from branch A",
+          branchB: ["item 1", "item 2"],
+        })
+      );
+    });
+
+    it("routes fan-in joined inputs into a list when target expects list", async () => {
+      const source = "step source: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=text) -> step merge: in=list, out=list";
+      const steps = parseChainSource(source);
+
+      let mergeInput: unknown = null;
+
+      const callModel = async (step: PromptStep, input: unknown) => {
+        if (step.name === "source") return "start";
+        if (step.name === "branchA") return "valA";
+        if (step.name === "branchB") return "valB";
+        if (step.name === "merge") {
+          mergeInput = input;
+          return JSON.stringify(["combined"]);
+        }
+        return "";
+      };
+
+      const result = await runSteps(steps, "go", callModel);
+      expect(result).toEqual(["combined"]);
+      expect(mergeInput).toEqual(["valA", "valB"]);
+    });
+
+    it("returns dictionary of outputs when multiple terminal steps exist", async () => {
+      const source = "step source: in=text, out=text -> (step branchA: in=text, out=text, step branchB: in=text, out=text)";
+      const steps = parseChainSource(source);
+
+      const result = await runSteps(steps, "hello", async (step) => `out-${step.name}`);
+      expect(result).toEqual({
+        branchA: "out-branchA",
+        branchB: "out-branchB",
+      });
+    });
+
+    it("detects and rejects cycles at runtime if executed directly", async () => {
+      const stepA: PromptStep = { name: "A", inType: "text", outType: "text", inputsFrom: ["B"], outputsTo: ["B"] };
+      const stepB: PromptStep = { name: "B", inType: "text", outType: "text", inputsFrom: ["A"], outputsTo: ["A"] };
+
+      await expect(runSteps([stepA, stepB], "test", async () => "result"))
+        .rejects.toThrow(/Cycle detected/i);
+    });
+  });
 });
 
 async function callHandler(

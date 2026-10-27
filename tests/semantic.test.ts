@@ -62,6 +62,43 @@ describe("PromptLang semantic analysis", () => {
     const steps = [{ name: "", inType: "", outType: "" }] as Step[];
     expect(() => analyze(steps)).not.toThrow();
   });
+
+  it("detects and flags cycles in DAG pipelines", () => {
+    const source =
+      "step A: in=text, out=text -> step B: in=text, out=text -> step A";
+    const issues = analyze(parse(tokenize(source)));
+
+    expect(issues.some((i) => i.message.includes("Cycle detected"))).toBe(true);
+  });
+
+  it("detects dangling references to undefined steps", () => {
+    const steps: Step[] = [
+      { name: "A", inType: "text", outType: "text", outputsTo: ["Ghost"] },
+    ];
+    const issues = analyze(steps);
+
+    expect(issues.some((i) => i.message.includes("Ghost") && i.message.includes("dangling"))).toBe(true);
+  });
+
+  it("detects unreachable steps in DAG pipelines", () => {
+    const source =
+      "step A: in=text, out=text -> step B: in=text, out=text; step C: in=text, out=text";
+    const issues = analyze(parse(tokenize(source)));
+
+    expect(issues.some((i) => i.message.includes("unreachable"))).toBe(true);
+  });
+
+  it("flags duplicate branch names in branch group", () => {
+    const source =
+      "step A: in=text, out=text -> (step B: in=text, out=text, step B: in=text, out=text)";
+    const issues = analyze(parse(tokenize(source)));
+
+    expect(
+      issues.some(
+        (i) => i.message.includes("Duplicate branch name") || i.message.includes("defined twice")
+      )
+    ).toBe(true);
+  });
 });
 
 describe("PromptLang parser unknown type message", () => {

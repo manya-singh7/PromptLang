@@ -83,7 +83,8 @@ function validateRuntimeJson(
   stepName: string,
   typeStr: string,
   obj: Record<string, unknown>,
-  pathPrefix = ""
+  pathPrefix = "",
+  context: "input" | "output" = "output"
 ): void {
   const schema = parseJsonSchema(typeStr);
   if (!schema) return;
@@ -91,7 +92,7 @@ function validateRuntimeJson(
   for (const [key, fieldDef] of Object.entries(schema)) {
     const fullPath = `${pathPrefix}${key}`;
     if (!(key in obj) || obj[key] === undefined) {
-      throw new Error(`Step "${stepName}" output is missing required field "${fullPath}"`);
+      throw new Error(`Step "${stepName}" ${context} is missing required field "${fullPath}"`);
     }
 
     const val = obj[key];
@@ -198,20 +199,117 @@ export async function runSteps(
   initialInput: unknown,
   callModel: ModelCall,
 ): Promise<unknown> {
-  let value = initialInput;
-  for (const step of steps) {
-    checkInputValue(step, value);
-    if (step.inType === "text" && step.inMax !== undefined && (value as string).length > step.inMax) {
-      throw new Error(`Step "${step.name}" input is longer than its ${step.inMax} character limit`);
+  if (steps.length === 0) return initialInput;
+
+  const stepMap = new Map<string, PromptStep>();
+  steps.forEach((s) => stepMap.set(s.name, s));
+
+  const isDag = steps.some(
+    (s) =>
+      (s.inputsFrom && s.inputsFrom.length > 1) ||
+      (s.outputsTo && s.outputsTo.length > 1) ||
+      (s.inputsFrom && s.inputsFrom.length > 0)
+  );
+
+  if (!isDag && steps.length > 1) {
+    let value = initialInput;
+    for (const step of steps) {
+      checkInputValue(step, value);
+      if (step.inType === "text" && step.inMax !== undefined && (value as string).length > step.inMax) {
+        throw new Error(`Step "${step.name}" input is longer than its ${step.inMax} character limit`);
+      }
+      if (step.inserted && step.name.endsWith("_to_text")) {
+        if (!Array.isArray(value)) throw new Error(`Adapter "${step.name}" expected a list`);
+        value = JSON.stringify(value);
+        continue;
+      }
+      value = checkRuntimeValue(step, await callModel(step, value));
     }
-    if (step.inserted && step.name.endsWith("_to_text")) {
-      if (!Array.isArray(value)) throw new Error(`Adapter "${step.name}" expected a list`);
-      value = JSON.stringify(value);
-      continue;
-    }
-    value = checkRuntimeValue(step, await callModel(step, value));
+    return value;
   }
-  return value;
+
+  const resultsMap = new Map<string, unknown>();
+  const promiseMap = new Map<string, Promise<unknown>>();
+
+  function executeStep(step: PromptStep, ancestors = new Set<string>()): Promise<unknown> {
+    if (ancestors.has(step.name)) {
+      return Promise.reject(new Error(`Cycle detected involving step "${step.name}"`));
+    }
+    if (promiseMap.has(step.name)) {
+      return promiseMap.get(step.name)!;
+    }
+
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(step.name);
+
+    const promise = (async () => {
+      const depNames = step.inputsFrom || [];
+      const depOutputs = await Promise.all(
+        depNames.map(async (name) => {
+          const depStep = stepMap.get(name);
+          if (!depStep) throw new Error(`Missing dependency step "${name}" for step "${step.name}"`);
+          return executeStep(depStep, nextAncestors);
+        })
+      );
+
+      let stepInputValue: unknown;
+      if (depNames.length === 0) {
+        stepInputValue = initialInput;
+      } else if (depNames.length === 1) {
+        stepInputValue = depOutputs[0];
+      } else {
+        if (step.inType === "list") {
+          stepInputValue = depOutputs;
+        } else if (step.inType === "json" || isParameterizedJson(step.inType)) {
+          const dict: Record<string, unknown> = {};
+          depNames.forEach((name, idx) => {
+            dict[name] = depOutputs[idx];
+            dict[name.toLowerCase()] = depOutputs[idx];
+          });
+          stepInputValue = dict;
+        } else {
+          stepInputValue = depOutputs.every((o) => typeof o === "string")
+            ? depOutputs.join("\n")
+            : depOutputs;
+        }
+      }
+
+      checkInputValue(step, stepInputValue);
+      if (step.inType === "text" && step.inMax !== undefined && (stepInputValue as string).length > step.inMax) {
+        throw new Error(`Step "${step.name}" input is longer than its ${step.inMax} character limit`);
+      }
+
+      if (step.inserted && step.name.endsWith("_to_text")) {
+        if (!Array.isArray(stepInputValue)) throw new Error(`Adapter "${step.name}" expected a list`);
+        const value = JSON.stringify(stepInputValue);
+        resultsMap.set(step.name, value);
+        return value;
+      }
+
+      const modelResult = await callModel(step, stepInputValue);
+      const validated = checkRuntimeValue(step, modelResult);
+      resultsMap.set(step.name, validated);
+      return validated;
+    })();
+
+    promiseMap.set(step.name, promise);
+    return promise;
+  }
+
+  const terminalSteps = steps.filter((s) => !s.outputsTo || s.outputsTo.length === 0);
+  const stepsToAwait = terminalSteps.length > 0 ? terminalSteps : [steps[steps.length - 1]!];
+
+  await Promise.all(stepsToAwait.map((s) => executeStep(s)));
+
+  if (stepsToAwait.length === 1) {
+    return resultsMap.get(stepsToAwait[0]!.name);
+  }
+
+  const finalObj: Record<string, unknown> = {};
+  for (const t of stepsToAwait) {
+    finalObj[t.name] = resultsMap.get(t.name);
+  }
+  return finalObj;
 }
 
 function checkInputValue(step: PromptStep, value: unknown): void {
@@ -228,6 +326,6 @@ function checkInputValue(step: PromptStep, value: unknown): void {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       throw new Error(`Step "${step.name}" expects a JSON object input`);
     }
-    validateRuntimeJson(step.name, step.inType, value as Record<string, unknown>);
+    validateRuntimeJson(step.name, step.inType, value as Record<string, unknown>, "", "input");
   }
 }

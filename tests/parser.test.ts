@@ -199,4 +199,65 @@ describe("PromptLang parser", () => {
     expect(() => parse(tokenize(source))).toThrow(ParseError);
     expect(() => parse(tokenize(source))).toThrow(/only allowed on "text"/i);
   });
+
+  it("parses fan-out branching step A -> (step B, step C)", () => {
+    const source =
+      "step A: in=text, out=text -> (step B: in=text, out=text, step C: in=text, out=text)";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toHaveLength(3);
+    expect(steps[0]!.name).toBe("A");
+    expect(steps[0]!.outputsTo).toEqual(["B", "C"]);
+    expect(steps[1]!.name).toBe("B");
+    expect(steps[1]!.inputsFrom).toEqual(["A"]);
+    expect(steps[2]!.name).toBe("C");
+    expect(steps[2]!.inputsFrom).toEqual(["A"]);
+  });
+
+  it("parses fan-in join (step B, step C) -> step D", () => {
+    const source =
+      "(step B: in=text, out=text, step C: in=text, out=text) -> step D: in=list, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toHaveLength(3);
+    expect(steps[0]!.name).toBe("B");
+    expect(steps[0]!.outputsTo).toEqual(["D"]);
+    expect(steps[1]!.name).toBe("C");
+    expect(steps[1]!.outputsTo).toEqual(["D"]);
+    expect(steps[2]!.name).toBe("D");
+    expect(steps[2]!.inputsFrom).toEqual(["B", "C"]);
+  });
+
+  it("parses chained fan-out and fan-in A -> (B, C) -> D", () => {
+    const source =
+      "step A: in=text, out=text -> (step B: in=text, out=text, step C: in=text, out=text) -> step D: in=list, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toHaveLength(4);
+    expect(steps[0]!.outputsTo).toEqual(["B", "C"]);
+    expect(steps[1]!.inputsFrom).toEqual(["A"]);
+    expect(steps[1]!.outputsTo).toEqual(["D"]);
+    expect(steps[2]!.inputsFrom).toEqual(["A"]);
+    expect(steps[2]!.outputsTo).toEqual(["D"]);
+    expect(steps[3]!.inputsFrom).toEqual(["B", "C"]);
+  });
+
+  it("parses multi-statement connections separated by semicolons", () => {
+    const source =
+      "step A: in=text, out=text -> step B: in=text, out=text; step A -> step C: in=text, out=text";
+    const steps = parse(tokenize(source));
+
+    expect(steps).toHaveLength(3);
+    expect(steps[0]!.outputsTo).toEqual(["B", "C"]);
+    expect(steps[1]!.inputsFrom).toEqual(["A"]);
+    expect(steps[2]!.inputsFrom).toEqual(["A"]);
+  });
+
+  it("parses explicit labeled from= dependencies", () => {
+    const source =
+      "step A: in=text, out=text -> step B: in=text, out=text -> step C: in=list, out=text, from=A,B";
+    const steps = parse(tokenize(source));
+
+    expect(steps[2]!.inputsFrom).toEqual(["A", "B"]);
+  });
 });

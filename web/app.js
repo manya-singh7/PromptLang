@@ -59,7 +59,7 @@
   }
   function tokenize(source) {
     const tokens = [];
-    const words = source.replace(/->/g, " -> ").replace(/:/g, " : ").replace(/,/g, " , ").replace(/=/g, " = ").replace(/\[/g, " [ ").replace(/\]/g, " ] ").replace(/\{/g, " { ").replace(/\}/g, " } ").split(/\s+/).filter((w) => w.length > 0);
+    const words = source.replace(/->/g, " -> ").replace(/:/g, " : ").replace(/,/g, " , ").replace(/=/g, " = ").replace(/\[/g, " [ ").replace(/\]/g, " ] ").replace(/\{/g, " { ").replace(/\}/g, " } ").replace(/\(/g, " ( ").replace(/\)/g, " ) ").replace(/;/g, " ; ").split(/\s+/).filter((w) => w.length > 0);
     const types = ["text", "list", "json"];
     for (const word of words) {
       if (word === "step") tokens.push({ type: "KEYWORD", value: word });
@@ -72,8 +72,11 @@
       else if (word === "]") tokens.push({ type: "RBRACKET", value: word });
       else if (word === "{") tokens.push({ type: "LBRACE", value: word });
       else if (word === "}") tokens.push({ type: "RBRACE", value: word });
+      else if (word === "(") tokens.push({ type: "LPAREN", value: word });
+      else if (word === ")") tokens.push({ type: "RPAREN", value: word });
+      else if (word === ";") tokens.push({ type: "SEMICOLON", value: word });
       else if (types.includes(word)) tokens.push({ type: "TYPE", value: word });
-      else if (word === "in" || word === "out") tokens.push({ type: "PARAM", value: word });
+      else if (word === "in" || word === "out" || word === "from") tokens.push({ type: "PARAM", value: word });
       else if (/^-?\d+$/.test(word)) tokens.push({ type: "NUMBER", value: word });
       else tokens.push({ type: "IDENTIFIER", value: word });
     }
@@ -227,61 +230,246 @@
     }
     return { type: typeName, nextPos: pos };
   }
-  function parse(tokens) {
-    const steps = [];
-    let pos = 0;
-    while (pos < tokens.length) {
-      expect(tokens, pos, "KEYWORD");
-      if (tokens[pos].value !== "step") {
-        throw new ParseError(`Expected "step" but got "${tokens[pos].value}" at token ${pos}`);
-      }
+  function createStep(name, inType = "", outType = "", inMax, outMax) {
+    const step = { name, inType, outType };
+    if (inMax !== void 0) step.inMax = inMax;
+    if (outMax !== void 0) step.outMax = outMax;
+    const inputsFrom = [];
+    const outputsTo = [];
+    Object.defineProperty(step, "inputsFrom", {
+      value: inputsFrom,
+      enumerable: false,
+      writable: true,
+      configurable: true
+    });
+    Object.defineProperty(step, "outputsTo", {
+      value: outputsTo,
+      enumerable: false,
+      writable: true,
+      configurable: true
+    });
+    return step;
+  }
+  function parseSingleStep(tokens, pos, allowBareIdentifier, stepMap, steps) {
+    if (!tokens[pos]) {
+      throw new ParseError(`Expected step at token ${pos}, but got end of input`);
+    }
+    if (tokens[pos].type === "KEYWORD" && tokens[pos].value === "step") {
       pos++;
       expect(tokens, pos, "IDENTIFIER");
       const name = tokens[pos].value;
       pos++;
-      expect(tokens, pos, "COLON");
+      if (tokens[pos] && tokens[pos].type === "COLON") {
+        pos++;
+        expect(tokens, pos, "PARAM");
+        if (tokens[pos].value !== "in") {
+          throw new ParseError(`Expected "in" but got "${tokens[pos].value}" at token ${pos}`);
+        }
+        pos++;
+        expect(tokens, pos, "EQUALS");
+        pos++;
+        const inParsed = parseTypeWithLimit(tokens, pos);
+        const inType = inParsed.type;
+        const inMax = inParsed.max;
+        pos = inParsed.nextPos;
+        expect(tokens, pos, "COMMA");
+        pos++;
+        expect(tokens, pos, "PARAM");
+        if (tokens[pos].value !== "out") {
+          throw new ParseError(`Expected "out" but got "${tokens[pos].value}" at token ${pos}`);
+        }
+        pos++;
+        expect(tokens, pos, "EQUALS");
+        pos++;
+        const outParsed = parseTypeWithLimit(tokens, pos);
+        const outType = outParsed.type;
+        const outMax = outParsed.max;
+        pos = outParsed.nextPos;
+        const explicitFrom = [];
+        if (tokens[pos] && tokens[pos].type === "COMMA" && tokens[pos + 1]?.value === "from") {
+          pos += 2;
+          expect(tokens, pos, "EQUALS");
+          pos++;
+          if (tokens[pos] && tokens[pos].type === "LPAREN") {
+            pos++;
+            while (pos < tokens.length && tokens[pos].type !== "RPAREN") {
+              if (tokens[pos].type === "KEYWORD" && tokens[pos].value === "step") pos++;
+              expect(tokens, pos, "IDENTIFIER");
+              explicitFrom.push(tokens[pos].value);
+              pos++;
+              if (tokens[pos] && tokens[pos].type === "COMMA") pos++;
+            }
+            expect(tokens, pos, "RPAREN");
+            pos++;
+          } else {
+            while (pos < tokens.length && (tokens[pos].type === "IDENTIFIER" || tokens[pos].type === "KEYWORD" && tokens[pos].value === "step")) {
+              if (tokens[pos].type === "KEYWORD" && tokens[pos].value === "step") pos++;
+              explicitFrom.push(tokens[pos].value);
+              pos++;
+              if (tokens[pos] && tokens[pos].type === "COMMA" && tokens[pos + 1]?.type === "IDENTIFIER") {
+                pos++;
+              } else {
+                break;
+              }
+            }
+          }
+        }
+        const step = createStep(name, inType, outType, inMax, outMax);
+        steps.push(step);
+        stepMap.set(name, step);
+        if (explicitFrom.length > 0) {
+          for (const fromName of explicitFrom) {
+            if (!step.inputsFrom.includes(fromName)) step.inputsFrom.push(fromName);
+            let fromStep = stepMap.get(fromName);
+            if (!fromStep) {
+              fromStep = createStep(fromName);
+              stepMap.set(fromName, fromStep);
+              steps.push(fromStep);
+            }
+            if (!fromStep.outputsTo.includes(name)) fromStep.outputsTo.push(name);
+          }
+        }
+        return { name, nextPos: pos };
+      } else {
+        if (tokens[pos] && tokens[pos].type === "PARAM" && tokens[pos].value === "in") {
+          throw new ParseError(
+            `Expected COLON at token ${pos}, but got ${tokens[pos].type} ("${tokens[pos].value}")`
+          );
+        }
+        let step = stepMap.get(name);
+        if (!step) {
+          step = createStep(name);
+          stepMap.set(name, step);
+          steps.push(step);
+        }
+        return { name, nextPos: pos };
+      }
+    } else {
+      if (!allowBareIdentifier) {
+        expect(tokens, pos, "KEYWORD");
+        if (tokens[pos].value !== "step") {
+          throw new ParseError(`Expected "step" but got "${tokens[pos].value}" at token ${pos}`);
+        }
+      }
+      expect(tokens, pos, "IDENTIFIER");
+      const name = tokens[pos].value;
       pos++;
-      expect(tokens, pos, "PARAM");
-      if (tokens[pos].value !== "in") {
-        throw new ParseError(`Expected "in" but got "${tokens[pos].value}" at token ${pos}`);
+      if (tokens[pos] && tokens[pos].type === "COLON") {
+        pos++;
+        expect(tokens, pos, "PARAM");
+        if (tokens[pos].value !== "in") {
+          throw new ParseError(`Expected "in" but got "${tokens[pos].value}" at token ${pos}`);
+        }
+        pos++;
+        expect(tokens, pos, "EQUALS");
+        pos++;
+        const inParsed = parseTypeWithLimit(tokens, pos);
+        const inType = inParsed.type;
+        const inMax = inParsed.max;
+        pos = inParsed.nextPos;
+        expect(tokens, pos, "COMMA");
+        pos++;
+        expect(tokens, pos, "PARAM");
+        if (tokens[pos].value !== "out") {
+          throw new ParseError(`Expected "out" but got "${tokens[pos].value}" at token ${pos}`);
+        }
+        pos++;
+        expect(tokens, pos, "EQUALS");
+        pos++;
+        const outParsed = parseTypeWithLimit(tokens, pos);
+        const outType = outParsed.type;
+        const outMax = outParsed.max;
+        pos = outParsed.nextPos;
+        const step = createStep(name, inType, outType, inMax, outMax);
+        steps.push(step);
+        stepMap.set(name, step);
+        return { name, nextPos: pos };
+      } else {
+        let step = stepMap.get(name);
+        if (!step) {
+          step = createStep(name);
+          stepMap.set(name, step);
+          steps.push(step);
+        }
+        return { name, nextPos: pos };
+      }
+    }
+  }
+  function parseGroup(tokens, pos, stepMap, steps) {
+    if (tokens[pos] && tokens[pos].type === "LPAREN") {
+      pos++;
+      const names = [];
+      while (pos < tokens.length && tokens[pos].type !== "RPAREN") {
+        const parsed = parseSingleStep(tokens, pos, true, stepMap, steps);
+        names.push(parsed.name);
+        pos = parsed.nextPos;
+        if (tokens[pos] && tokens[pos].type === "COMMA") {
+          pos++;
+        } else if (tokens[pos] && tokens[pos].type === "RPAREN") {
+          break;
+        } else {
+          const got = tokens[pos] ? `${tokens[pos].type} ("${tokens[pos].value}")` : "end of input";
+          throw new ParseError(`Expected "," or ")" in step group at token ${pos}, but got ${got}`);
+        }
+      }
+      if (!tokens[pos] || tokens[pos].type !== "RPAREN") {
+        throw new ParseError(`Missing closing ")" for step group at token ${pos}`);
       }
       pos++;
-      expect(tokens, pos, "EQUALS");
-      pos++;
-      const inParsed = parseTypeWithLimit(tokens, pos);
-      const inType = inParsed.type;
-      const inMax = inParsed.max;
-      pos = inParsed.nextPos;
-      expect(tokens, pos, "COMMA");
-      pos++;
-      expect(tokens, pos, "PARAM");
-      if (tokens[pos].value !== "out") {
-        throw new ParseError(`Expected "out" but got "${tokens[pos].value}" at token ${pos}`);
+      return { names, nextPos: pos };
+    } else {
+      const parsed = parseSingleStep(tokens, pos, false, stepMap, steps);
+      return { names: [parsed.name], nextPos: parsed.nextPos };
+    }
+  }
+  function parse(tokens) {
+    const steps = [];
+    const stepMap = /* @__PURE__ */ new Map();
+    let pos = 0;
+    while (pos < tokens.length) {
+      if (tokens[pos].type === "SEMICOLON") {
+        pos++;
+        continue;
       }
-      pos++;
-      expect(tokens, pos, "EQUALS");
-      pos++;
-      const outParsed = parseTypeWithLimit(tokens, pos);
-      const outType = outParsed.type;
-      const outMax = outParsed.max;
-      pos = outParsed.nextPos;
-      const step = { name, inType, outType };
-      if (inMax !== void 0) {
-        step.inMax = inMax;
-      }
-      if (outMax !== void 0) {
-        step.outMax = outMax;
-      }
-      steps.push(step);
-      if (tokens[pos] && tokens[pos].type === "ARROW") {
+      let currentGroup = parseGroup(tokens, pos, stepMap, steps);
+      pos = currentGroup.nextPos;
+      while (pos < tokens.length && tokens[pos].type === "ARROW") {
         pos++;
         if (pos >= tokens.length) {
-          throw new ParseError(`Unexpected end of input after "->" at token ${pos} \u2014 a step was expected after the arrow`);
+          throw new ParseError(
+            `Unexpected end of input after "->" at token ${pos} \u2014 a step was expected after the arrow`
+          );
         }
-      } else if (pos < tokens.length) {
+        const nextGroup = parseGroup(tokens, pos, stepMap, steps);
+        pos = nextGroup.nextPos;
+        for (const sourceName of currentGroup.names) {
+          const sourceStep = stepMap.get(sourceName);
+          for (const targetName of nextGroup.names) {
+            const targetStep = stepMap.get(targetName);
+            if (sourceStep && !sourceStep.outputsTo.includes(targetName)) {
+              sourceStep.outputsTo.push(targetName);
+            }
+            if (targetStep && !targetStep.inputsFrom.includes(sourceName)) {
+              targetStep.inputsFrom.push(sourceName);
+            }
+          }
+        }
+        currentGroup = nextGroup;
+      }
+      if (pos < tokens.length && tokens[pos].type !== "SEMICOLON") {
         throw new ParseError(`Expected -> or end of input at token ${pos}`);
       }
     }
+    Object.defineProperty(steps, "graph", {
+      value: {
+        steps,
+        dependencies: new Map(steps.map((s) => [s.name, s.inputsFrom || []])),
+        dependents: new Map(steps.map((s) => [s.name, s.outputsTo || []]))
+      },
+      enumerable: false,
+      writable: true,
+      configurable: true
+    });
     return steps;
   }
   var ParseError;
@@ -324,11 +512,13 @@
       return issues;
     }
     const firstIndexByName = /* @__PURE__ */ new Map();
+    let hasDuplicateNames = false;
     steps.forEach((step, index) => {
       const firstIndex = firstIndexByName.get(step.name);
       if (firstIndex === void 0) {
         firstIndexByName.set(step.name, index);
       } else {
+        hasDuplicateNames = true;
         issues.push({
           stepIndex: index,
           message: `step "${step.name}" is defined twice (steps ${firstIndex + 1} and ${index + 1})`
@@ -339,6 +529,111 @@
       checkLimit(step, index, "input", step.inType, step.inMax, issues);
       checkLimit(step, index, "output", step.outType, step.outMax, issues);
     });
+    const stepNameSet = new Set(steps.map((s) => s.name));
+    steps.forEach((step, index) => {
+      const seenInputs = /* @__PURE__ */ new Set();
+      for (const dep of step.inputsFrom || []) {
+        if (seenInputs.has(dep)) {
+          issues.push({
+            stepIndex: index,
+            message: `Duplicate branch name "${dep}" in inputs to step "${step.name}"`
+          });
+        }
+        seenInputs.add(dep);
+        if (!stepNameSet.has(dep)) {
+          issues.push({
+            stepIndex: index,
+            message: `Step "${step.name}" references undefined step "${dep}" (dangling reference)`
+          });
+        }
+      }
+      const seenOutputs = /* @__PURE__ */ new Set();
+      for (const target of step.outputsTo || []) {
+        if (seenOutputs.has(target)) {
+          issues.push({
+            stepIndex: index,
+            message: `Duplicate branch name "${target}" in outputs from step "${step.name}"`
+          });
+        }
+        seenOutputs.add(target);
+        if (!stepNameSet.has(target)) {
+          issues.push({
+            stepIndex: index,
+            message: `Step "${step.name}" references undefined step "${target}" (dangling reference)`
+          });
+        }
+      }
+    });
+    const hasGraphAnnotations = steps.some(
+      (s) => s.inputsFrom && s.inputsFrom.length > 0 || s.outputsTo && s.outputsTo.length > 0
+    );
+    if (!hasDuplicateNames && hasGraphAnnotations) {
+      const inDegree = /* @__PURE__ */ new Map();
+      const adj = /* @__PURE__ */ new Map();
+      for (const step of steps) {
+        inDegree.set(step.name, (step.inputsFrom || []).length);
+        adj.set(step.name, [...step.outputsTo || []]);
+      }
+      const queue = [];
+      for (const [name, deg] of inDegree.entries()) {
+        if (deg === 0) queue.push(name);
+      }
+      let visitedCount = 0;
+      while (queue.length > 0) {
+        const curr = queue.shift();
+        visitedCount++;
+        const neighbors = adj.get(curr) || [];
+        for (const n of neighbors) {
+          const currentDeg = inDegree.get(n);
+          if (currentDeg !== void 0) {
+            const newDeg = currentDeg - 1;
+            inDegree.set(n, newDeg);
+            if (newDeg === 0) queue.push(n);
+          }
+        }
+      }
+      if (visitedCount < steps.length) {
+        const cyclicStepNames = steps.filter((s) => (inDegree.get(s.name) ?? 0) > 0).map((s) => s.name);
+        const firstCyclicIndex = steps.findIndex((s) => cyclicStepNames.includes(s.name));
+        issues.push({
+          stepIndex: firstCyclicIndex >= 0 ? firstCyclicIndex : 0,
+          message: `Cycle detected: chain contains circular dependency involving step "${steps[firstCyclicIndex]?.name ?? cyclicStepNames[0]}"`
+        });
+      }
+      if (steps.length > 1) {
+        const rootSteps = steps.filter(
+          (s) => (s.inputsFrom || []).length === 0 && (s.outputsTo || []).length > 0
+        );
+        const reachable = /* @__PURE__ */ new Set();
+        const reachQueue = [...rootSteps.map((s) => s.name)];
+        for (const r of reachQueue) reachable.add(r);
+        while (reachQueue.length > 0) {
+          const curr = reachQueue.shift();
+          const neighbors = adj.get(curr) || [];
+          for (const n of neighbors) {
+            if (!reachable.has(n)) {
+              reachable.add(n);
+              reachQueue.push(n);
+            }
+          }
+        }
+        steps.forEach((step, index) => {
+          const inCount = (step.inputsFrom || []).length;
+          const outCount = (step.outputsTo || []).length;
+          if (inCount === 0 && outCount === 0) {
+            issues.push({
+              stepIndex: index,
+              message: `Step "${step.name}" is unreachable (disconnected from chain)`
+            });
+          } else if (inCount > 0 && !reachable.has(step.name)) {
+            issues.push({
+              stepIndex: index,
+              message: `Step "${step.name}" is unreachable from pipeline entry roots`
+            });
+          }
+        });
+      }
+    }
     return issues;
   }
   var KNOWN_TYPES;
@@ -443,64 +738,199 @@
   // semantic/checkChain.ts
   function checkChain(steps, options) {
     const results = [];
-    for (let i = 0; i < steps.length - 1; i++) {
-      const current = steps[i];
-      const next = steps[i + 1];
-      const fromType = current.outType;
-      const toType = next.inType;
-      if (fromType === "list" && toType === "text") {
-        results.push({
-          fromIndex: i,
-          ok: false,
-          message: `Step "${current.name}" outputs list, but step "${next.name}" expects text.`,
-          fix: "list-to-text"
-        });
-        continue;
+    if (steps.length === 0) return results;
+    const stepMap = /* @__PURE__ */ new Map();
+    const stepIndexMap = /* @__PURE__ */ new Map();
+    steps.forEach((s, idx) => {
+      stepMap.set(s.name, s);
+      stepIndexMap.set(s.name, idx);
+    });
+    const isDag = steps.some(
+      (s) => s.inputsFrom && s.inputsFrom.length > 1 || s.outputsTo && s.outputsTo.length > 1
+    );
+    if (!isDag) {
+      for (let i = 0; i < steps.length - 1; i++) {
+        const current = steps[i];
+        const next = steps[i + 1];
+        checkPair(current, next, i, results, options);
       }
-      const sub = checkTypeSubtype(fromType, toType, options);
-      if (!sub.ok) {
-        let detail = "";
-        if (sub.reason && (isParameterizedJson(fromType) || isParameterizedJson(toType) || fromType === "json" && isParameterizedJson(toType))) {
-          detail = ` ${sub.reason}.`;
+      return results;
+    }
+    const handledJoins = /* @__PURE__ */ new Set();
+    for (const step of steps) {
+      const depNames = step.inputsFrom || [];
+      if (depNames.length > 1) {
+        handledJoins.add(step.name);
+        const targetIndex = stepIndexMap.get(step.name) ?? -1;
+        const depSteps = depNames.map((name) => stepMap.get(name)).filter(Boolean);
+        if (isParameterizedJson(step.inType)) {
+          const schema = parseJsonSchema(step.inType);
+          if (schema) {
+            for (const dep of depSteps) {
+              const depIndex = stepIndexMap.get(dep.name) ?? -1;
+              const fieldKey = dep.name in schema ? dep.name : dep.name.toLowerCase() in schema ? dep.name.toLowerCase() : null;
+              if (!fieldKey) {
+                results.push({
+                  fromIndex: depIndex,
+                  ok: false,
+                  message: `Fan-in contract mismatch: step "${step.name}" does not declare an input field for step "${dep.name}".`
+                });
+              } else {
+                const expectedField = schema[fieldKey];
+                const sub = checkTypeSubtype(dep.outType, expectedField.rawType, options);
+                if (!sub.ok) {
+                  results.push({
+                    fromIndex: depIndex,
+                    ok: false,
+                    message: `Fan-in contract mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${expectedField.rawType}" for input "${fieldKey}". Field "${fieldKey}" type mismatch: expected "${expectedField.rawType}", but got "${dep.outType}".`
+                  });
+                } else {
+                  results.push({ fromIndex: depIndex, ok: true });
+                }
+              }
+            }
+            for (const requiredKey of Object.keys(schema)) {
+              const provided = depSteps.some(
+                (d) => d.name === requiredKey || d.name.toLowerCase() === requiredKey
+              );
+              if (!provided) {
+                results.push({
+                  fromIndex: targetIndex,
+                  ok: false,
+                  message: `Fan-in contract mismatch: step "${step.name}" requires input "${requiredKey}", but no matching incoming step was provided.`
+                });
+              }
+            }
+          }
+        } else if (step.inType === "list" || step.inType === "json") {
+          for (const dep of depSteps) {
+            const depIndex = stepIndexMap.get(dep.name) ?? -1;
+            results.push({ fromIndex: depIndex, ok: true });
+          }
+        } else {
+          for (const dep of depSteps) {
+            const depIndex = stepIndexMap.get(dep.name) ?? -1;
+            const sub = checkTypeSubtype(dep.outType, step.inType, options);
+            if (!sub.ok) {
+              results.push({
+                fromIndex: depIndex,
+                ok: false,
+                message: `Fan-in type mismatch: step "${dep.name}" outputs "${dep.outType}", but step "${step.name}" expects "${step.inType}".`
+              });
+            } else {
+              results.push({ fromIndex: depIndex, ok: true });
+            }
+          }
         }
-        results.push({
-          fromIndex: i,
-          ok: false,
-          message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".${detail}`
-        });
-        continue;
       }
-      if (fromType !== "text" && (current.outMax !== void 0 || next.inMax !== void 0)) {
-        results.push({
-          fromIndex: i,
-          ok: false,
-          message: `Length limits are only allowed on text. Check steps "${current.name}" and "${next.name}".`
-        });
-        continue;
-      }
-      if (fromType === "text") {
-        const outputLimit = current.outMax;
-        const inputLimit = next.inMax;
-        if (outputLimit === void 0 && inputLimit !== void 0) {
+    }
+    for (const step of steps) {
+      const targets = step.outputsTo || [];
+      const fromIndex = stepIndexMap.get(step.name) ?? -1;
+      for (const targetName of targets) {
+        const target = stepMap.get(targetName);
+        if (!target) continue;
+        if (handledJoins.has(target.name)) continue;
+        const isFanOut = targets.length > 1;
+        const sub = checkTypeSubtype(step.outType, target.inType, options);
+        if (!sub.ok) {
+          let detail = "";
+          if (sub.reason && (isParameterizedJson(step.outType) || isParameterizedJson(target.inType) || step.outType === "json" && isParameterizedJson(target.inType))) {
+            detail = ` ${sub.reason}.`;
+          }
+          const prefix = isFanOut ? "Fan-out type mismatch: " : "Type mismatch: ";
           results.push({
-            fromIndex: i,
+            fromIndex,
             ok: false,
-            message: `Step "${current.name}" has unlimited text output, but step "${next.name}" accepts at most ${inputLimit} characters.`
+            message: `${prefix}step "${step.name}" outputs "${step.outType}", but step "${target.name}" expects "${target.inType}".${detail}`
           });
-          continue;
-        }
-        if (outputLimit !== void 0 && inputLimit !== void 0 && inputLimit < outputLimit) {
-          results.push({
-            fromIndex: i,
-            ok: false,
-            message: `Step "${current.name}" may output ${outputLimit} characters, but step "${next.name}" accepts only ${inputLimit}.`
-          });
-          continue;
+        } else {
+          if (step.outType !== "text" && (step.outMax !== void 0 || target.inMax !== void 0)) {
+            results.push({
+              fromIndex,
+              ok: false,
+              message: `Length limits are only allowed on text. Check steps "${step.name}" and "${target.name}".`
+            });
+          } else if (step.outType === "text") {
+            const outputLimit = step.outMax;
+            const inputLimit = target.inMax;
+            if (outputLimit === void 0 && inputLimit !== void 0) {
+              results.push({
+                fromIndex,
+                ok: false,
+                message: `Step "${step.name}" has unlimited text output, but step "${target.name}" accepts at most ${inputLimit} characters.`
+              });
+            } else if (outputLimit !== void 0 && inputLimit !== void 0 && inputLimit < outputLimit) {
+              results.push({
+                fromIndex,
+                ok: false,
+                message: `Step "${step.name}" may output ${outputLimit} characters, but step "${target.name}" accepts only ${inputLimit}.`
+              });
+            } else {
+              results.push({ fromIndex, ok: true });
+            }
+          } else {
+            results.push({ fromIndex, ok: true });
+          }
         }
       }
-      results.push({ fromIndex: i, ok: true });
     }
     return results;
+  }
+  function checkPair(current, next, i, results, options) {
+    const fromType = current.outType;
+    const toType = next.inType;
+    if (fromType === "list" && toType === "text") {
+      results.push({
+        fromIndex: i,
+        ok: false,
+        message: `Step "${current.name}" outputs list, but step "${next.name}" expects text.`,
+        fix: "list-to-text"
+      });
+      return;
+    }
+    const sub = checkTypeSubtype(fromType, toType, options);
+    if (!sub.ok) {
+      let detail = "";
+      if (sub.reason && (isParameterizedJson(fromType) || isParameterizedJson(toType) || fromType === "json" && isParameterizedJson(toType))) {
+        detail = ` ${sub.reason}.`;
+      }
+      results.push({
+        fromIndex: i,
+        ok: false,
+        message: `Type mismatch: step "${current.name}" outputs "${fromType}", but step "${next.name}" expects "${toType}".${detail}`
+      });
+      return;
+    }
+    if (fromType !== "text" && (current.outMax !== void 0 || next.inMax !== void 0)) {
+      results.push({
+        fromIndex: i,
+        ok: false,
+        message: `Length limits are only allowed on text. Check steps "${current.name}" and "${next.name}".`
+      });
+      return;
+    }
+    if (fromType === "text") {
+      const outputLimit = current.outMax;
+      const inputLimit = next.inMax;
+      if (outputLimit === void 0 && inputLimit !== void 0) {
+        results.push({
+          fromIndex: i,
+          ok: false,
+          message: `Step "${current.name}" has unlimited text output, but step "${next.name}" accepts at most ${inputLimit} characters.`
+        });
+        return;
+      }
+      if (outputLimit !== void 0 && inputLimit !== void 0 && inputLimit < outputLimit) {
+        results.push({
+          fromIndex: i,
+          ok: false,
+          message: `Step "${current.name}" may output ${outputLimit} characters, but step "${next.name}" accepts only ${inputLimit}.`
+        });
+        return;
+      }
+    }
+    results.push({ fromIndex: i, ok: true });
   }
   var init_checkChain = __esm({
     "semantic/checkChain.ts"() {
